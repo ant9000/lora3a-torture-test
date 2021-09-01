@@ -20,6 +20,9 @@
 consume_data_cb_t *packet_consumer;
 
 static lora_state_t lora;
+#ifdef BOARD_LORA3A_DONGLE
+static uint32_t num_messages = 0;
+#endif
 
 ssize_t packet_received(const void *buffer, size_t len)
 {
@@ -27,12 +30,15 @@ ssize_t packet_received(const void *buffer, size_t len)
     (void)len;
 
     // dump message to stdout
+#ifdef BOARD_LORA3A_DONGLE
+    printf("Num messages received: %ld\n", ++num_messages);
+#endif
     puts("Received packet:");
     od_hex_dump(buffer, len < 128 ? len : 128, 0);
 #ifdef BOARD_LORA3A_SENSOR1
     // parse command
     char *ptr = (char *)buffer;
-    if((ptr[0] == '@') && (ptr[strlen(ptr)-1] == '$')) {
+    if((ptr[0] == '@') && (ptr[len-1] == '$')) {
         uint32_t seconds = strtoul(ptr+1, NULL, 0);
         printf("Instructed to sleep for %lu seconds\n", seconds);
         rtc_mem_write(0, (char *)&seconds, sizeof(seconds));
@@ -89,6 +95,8 @@ void backup_mode(uint32_t seconds)
     rtt_set_alarm(RTT_SEC_TO_TICKS(seconds), NULL, NULL);
 
     puts("Now entering backup mode.");
+    // turn off radio
+    lora_off();
     // turn off PORT pins
     size_t num = sizeof(PORT->Group)/sizeof(PortGroup);
     size_t num1 = sizeof(PORT->Group[0].PINCFG)/sizeof(PORT_PINCFG_Type);
@@ -127,7 +135,7 @@ int main(void)
     ztimer_sleep(ZTIMER_MSEC, 1000);
     uint32_t seconds;
     rtc_mem_read(0, (char *)&seconds, sizeof(seconds));
-    printf("Saved sleep value: %lu seconds\n", seconds);
+    printf("Sleep value: %lu seconds\n", seconds);
     seconds = (seconds > 0) && (seconds < 120) ? seconds : 5;
     backup_mode(seconds);
 #else

@@ -16,5 +16,6 @@ USEMODULE += periph_cpuid
 USEMODULE += periph_i2c
 USEMODULE += periph_rtt
 USEMODULE += periph_rtc_mem
+USEMODULE += periph_spi_reconfigure
 
 include $(RIOTBASE)/Makefile.include

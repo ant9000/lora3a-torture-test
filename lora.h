@@ -13,6 +13,7 @@ typedef struct {
 } lora_state_t;
 
 int lora_init(const lora_state_t *state);
+void lora_off(void);
 int lora_write(char *msg, size_t len);
 void lora_listen(void);
 

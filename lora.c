@@ -29,6 +29,7 @@ int lora_init(const lora_state_t *state)
     netdev_t *netdev = (netdev_t *)&sx127x;
     netdev->driver = &sx127x_driver;
 
+    spi_init(sx127x.params.spi);
     if (netdev->driver->init(netdev) < 0) return 1;
 
     uint8_t  lora_bw = state->bandwidth;
@@ -51,6 +52,13 @@ int lora_init(const lora_state_t *state)
 
     if (lora_recv_pid <= KERNEL_PID_UNDEF) return 1;
     return 0;
+}
+
+void lora_off(void)
+{
+    sx127x_set_sleep(&sx127x);
+    spi_release(sx127x.params.spi);
+    spi_deinit_pins(sx127x.params.spi);
 }
 
 int lora_write(char *msg, size_t len)
