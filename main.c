@@ -4,6 +4,7 @@
 #include "fmt.h"
 
 #ifdef BOARD_LORA3A_SENSOR1
+#include "mutex.h"
 #include "periph/adc.h"
 #include "periph/cpuid.h"
 #include "periph/gpio.h"
@@ -20,6 +21,9 @@
 consume_data_cb_t *packet_consumer;
 
 static lora_state_t lora;
+#ifdef BOARD_LORA3A_SENSOR1
+static mutex_t sleep_lock = MUTEX_INIT;
+#endif
 #ifdef BOARD_LORA3A_DONGLE
 static uint32_t num_messages = 0;
 #endif
@@ -36,6 +40,8 @@ ssize_t packet_received(const void *buffer, size_t len)
     puts("Received packet:");
     od_hex_dump(buffer, len < 128 ? len : 128, 0);
 #ifdef BOARD_LORA3A_SENSOR1
+    // hold the mutex: don't enter sleep yet, we need to do some work
+    mutex_lock(&sleep_lock);
     // parse command
     char *ptr = (char *)buffer;
     if((ptr[0] == '@') && (ptr[len-1] == '$')) {
@@ -43,6 +49,8 @@ ssize_t packet_received(const void *buffer, size_t len)
         printf("Instructed to sleep for %lu seconds\n", seconds);
         rtc_mem_write(0, (char *)&seconds, sizeof(seconds));
     }
+    // release the mutex
+    mutex_unlock(&sleep_lock);
 #else
 #ifdef BOARD_LORA3A_DONGLE
     // send command
@@ -52,6 +60,7 @@ ssize_t packet_received(const void *buffer, size_t len)
     to_lora(command, strlen(command));
 #endif
 #endif
+
     return 0;
 }
 
@@ -133,10 +142,14 @@ int main(void)
     send_measures();
     lora_listen();
     ztimer_sleep(ZTIMER_MSEC, 1000);
+    // hold the mutex: don't parse packets because we're going to sleep
+    mutex_lock(&sleep_lock);
+    // read the sleep interval duration from rtc_mem
     uint32_t seconds;
     rtc_mem_read(0, (char *)&seconds, sizeof(seconds));
     printf("Sleep value: %lu seconds\n", seconds);
     seconds = (seconds > 0) && (seconds < 120) ? seconds : 5;
+    // enter deep sleep
     backup_mode(seconds);
 #else
 #ifdef BOARD_LORA3A_DONGLE
