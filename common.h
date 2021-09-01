@@ -8,7 +8,7 @@
 
 #include "lora.h"
 
-#define MAX_PAYLOAD_LEN 64
+#define MAX_PAYLOAD_LEN 90
 #define MAX_PACKET_LEN  (MAX_PAYLOAD_LEN + 10) // TODO: define Embit header
 
 #define DEFAULT_LORA_BANDWIDTH        LORA_BW_500_KHZ

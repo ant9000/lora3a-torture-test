@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <string.h>
 #include "od.h"
+#include "fmt.h"
 
 #ifdef BOARD_LORA3A_SENSOR1
-#include "periph/pm.h"
-#include "periph/gpio.h"
 #include "periph/adc.h"
+#include "periph/cpuid.h"
+#include "periph/gpio.h"
+#include "periph/pm.h"
 #include "periph/rtt.h"
 #include "periph/rtc_mem.h"
 
@@ -51,6 +53,12 @@ ssize_t packet_received(const void *buffer, size_t len)
 void send_measures(void)
 {
     char buffer[MAX_PACKET_LEN];
+    // get cpuid
+    uint8_t cpuid[CPUID_LEN];
+    char cpuid_str[CPUID_LEN*2+1];
+    cpuid_get(&cpuid);
+    fmt_bytes_hex(cpuid_str, cpuid, CPUID_LEN);
+    cpuid_str[CPUID_LEN*2]='\0';
     // read vcc
     int32_t vcc = adc_sample(0, ADC_RES_12BIT);
     // read vpanel
@@ -62,7 +70,8 @@ void send_measures(void)
     // read temp, hum
     double temp=0, hum=0;
     read_hdc2021(&temp, &hum);
-    sprintf(buffer, "prova vcc=%ld, vpanel=%ld, temp=%.2f, hum=%.2f", vcc, vpanel, temp, hum);
+    // send packet
+    sprintf(buffer, "cpuid=%s vcc=%ld, vpanel=%ld, temp=%.2f, hum=%.2f", cpuid_str, vcc, vpanel, temp, hum);
     puts("Sending packet:");
     printf("%s\n", buffer);
     to_lora(buffer, strlen(buffer));
