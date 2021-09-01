@@ -1,5 +1,5 @@
 APPLICATION = lora3a-torture-test
-BOARD ?= lora3a-dongle
+BOARD ?= lora3a-sensor1
 RIOTBASE ?= $(CURDIR)/../RIOT
 EXTERNAL_BOARD_DIRS ?= $(CURDIR)/../lora3a-boards/boards
 QUIET ?= 1
