@@ -21,30 +21,65 @@
 consume_data_cb_t *packet_consumer;
 
 static lora_state_t lora;
+
 #ifdef BOARD_LORA3A_SENSOR1
 static mutex_t sleep_lock = MUTEX_INIT;
+#ifndef EMB_ADDRESS
+#define EMB_ADDRESS 1
 #endif
+#endif
+
 #ifdef BOARD_LORA3A_DONGLE
+#ifndef EMB_ADDRESS
+#define EMB_ADDRESS 254
+#endif
 static uint32_t num_messages = 0;
 #endif
 
+#ifndef EMB_NETWORK
+#define EMB_NETWORK 1
+#endif
+
+static uint16_t emb_counter = 0;
+
+void send_to(uint8_t dst, char *buffer, size_t len)
+{
+    char packet_buffer[MAX_PACKET_LEN];
+    embit_packet_t *p = (embit_packet_t *)packet_buffer;
+    p->header.signature = EMB_SIGNATURE;
+    p->header.counter = emb_counter++;
+    p->header.network = EMB_NETWORK;
+    p->header.dst = dst;
+    p->header.src = EMB_ADDRESS;
+    memcpy(p->payload, buffer, len);
+    to_lora(packet_buffer, EMB_HEADER_LEN+len);
+}
+
 ssize_t packet_received(const void *buffer, size_t len)
 {
-    (void)buffer;
-    (void)len;
+    embit_packet_t *p = (embit_packet_t *)buffer;
+    embit_header_t h = p->header;
+    ssize_t n = len - EMB_HEADER_LEN;
+
+    // discard invalid packets
+    if ((h.signature != EMB_SIGNATURE) || (n <= 0) || (n >= MAX_PAYLOAD_LEN)) { return 0; }
+
+    // discard packets if not for us and not broadcast
+    if ((h.dst != EMB_ADDRESS) && (h.dst != EMB_BROADCAST)) { return 0; }
 
     // dump message to stdout
 #ifdef BOARD_LORA3A_DONGLE
     printf("Num messages received: %ld\n", ++num_messages);
 #endif
     puts("Received packet:");
-    od_hex_dump(buffer, len < 128 ? len : 128, 0);
+    printf("CNT:%u NET:%u DST:%u SRC:%u\n", h.counter, h.network, h.dst, h.src);
+    char *ptr = p->payload;
+    od_hex_dump(ptr, n < 128 ? n : 128, 0);
 #ifdef BOARD_LORA3A_SENSOR1
     // hold the mutex: don't enter sleep yet, we need to do some work
     mutex_lock(&sleep_lock);
     // parse command
-    char *ptr = (char *)buffer;
-    if((ptr[0] == '@') && (ptr[len-1] == '$')) {
+    if((ptr[0] == '@') && (ptr[n-1] == '$')) {
         uint32_t seconds = strtoul(ptr+1, NULL, 0);
         printf("Instructed to sleep for %lu seconds\n", seconds);
         rtc_mem_write(0, (char *)&seconds, sizeof(seconds));
@@ -57,17 +92,15 @@ ssize_t packet_received(const void *buffer, size_t len)
     char command[] = "@1$";
     puts("Sending packet:");
     printf("%s\n", command);
-    to_lora(command, strlen(command));
+    send_to(h.src, command, strlen(command));
 #endif
 #endif
-
     return 0;
 }
 
 #ifdef BOARD_LORA3A_SENSOR1
 void send_measures(void)
 {
-    char buffer[MAX_PACKET_LEN];
     // get cpuid
     uint8_t cpuid[CPUID_LEN];
     char cpuid_str[CPUID_LEN*2+1];
@@ -86,10 +119,9 @@ void send_measures(void)
     double temp=0, hum=0;
     read_hdc2021(&temp, &hum);
     // send packet
-    sprintf(buffer, "cpuid=%s vcc=%ld, vpanel=%ld, temp=%.2f, hum=%.2f", cpuid_str, vcc, vpanel, temp, hum);
-    puts("Sending packet:");
-    printf("%s\n", buffer);
-    to_lora(buffer, strlen(buffer));
+    char message[MAX_PAYLOAD_LEN];
+    snprintf(message, MAX_PAYLOAD_LEN, "cpuid=%s vcc=%ld vpanel=%ld temp=%.2f hum=%.2f", cpuid_str, vcc, vpanel, temp, hum);
+    send_to(EMB_BROADCAST, message, strlen(message));
 }
 
 void backup_mode(uint32_t seconds)
