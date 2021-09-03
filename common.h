@@ -18,6 +18,6 @@
 #define DEFAULT_LORA_CHANNEL          SX127X_CHANNEL_DEFAULT
 #define DEFAULT_LORA_POWER            SX127X_RADIO_TX_POWER
 
-typedef ssize_t (consume_data_cb_t)(const void *buffer, size_t len);
+typedef ssize_t (consume_data_cb_t)(const void *buffer, size_t len, uint8_t *rssi, int8_t *snr);
 
 #endif /* COMMON_H */

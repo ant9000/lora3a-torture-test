@@ -16,6 +16,7 @@ static char stack[SX127X_STACKSIZE];
 static kernel_pid_t lora_recv_pid;
 static sx127x_t sx127x;
 static char lora_buffer[MAX_PACKET_LEN];
+static netdev_lora_rx_info_t lora_packet_info;
 
 static lora_data_cb_t *lora_data_cb;
 static void _lora_rx_cb(netdev_t *dev, netdev_event_t event);
@@ -103,8 +104,8 @@ static void _lora_rx_cb(netdev_t *dev, netdev_event_t event)
             case NETDEV_EVENT_RX_COMPLETE:
                 len = dev->driver->recv(dev, NULL, 0, 0);
                 if (len <= MAX_PACKET_LEN) {
-                    dev->driver->recv(dev, lora_buffer, len, NULL);
-                    lora_data_cb(lora_buffer, len);
+                    dev->driver->recv(dev, lora_buffer, len, &lora_packet_info);
+                    lora_data_cb(lora_buffer, len, &lora_packet_info.rssi, &lora_packet_info.snr);
                 } else {
                     /* spurious communication - ignore */
                 }

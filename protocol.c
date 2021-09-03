@@ -15,11 +15,11 @@ extern consume_data_cb_t *packet_consumer;
 mutex_t lora_write_lock = MUTEX_INIT;
 mutex_t lora_read_lock = MUTEX_INIT;
 
-void from_lora(const char *buffer, size_t len)
+void from_lora(const char *buffer, size_t len, uint8_t *rssi, int8_t *snr)
 {
     mutex_lock(&lora_read_lock);
     HEXDUMP("RECEIVED PACKET:", buffer, len);
-    packet_consumer((char *)buffer, len);
+    packet_consumer((char *)buffer, len, rssi, snr);
     mutex_unlock(&lora_read_lock);
 }
 

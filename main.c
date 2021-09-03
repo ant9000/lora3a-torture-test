@@ -62,7 +62,7 @@ void send_to(uint8_t dst, char *buffer, size_t len)
     to_lora(packet_buffer, EMB_HEADER_LEN+len);
 }
 
-ssize_t packet_received(const void *buffer, size_t len)
+ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *snr)
 {
     embit_packet_t *p = (embit_packet_t *)buffer;
     embit_header_t h = p->header;
@@ -79,7 +79,7 @@ ssize_t packet_received(const void *buffer, size_t len)
     printf("Num messages received: %ld\n", ++num_messages);
 #endif
     puts("Received packet:");
-    printf("CNT:%u NET:%u DST:%u SRC:%u\n", h.counter, h.network, h.dst, h.src);
+    printf("CNT:%u NET:%u DST:%u SRC:%u RSSI:%d SNR:%d\n", h.counter, h.network, h.dst, h.src, *rssi, *snr);
     char *ptr = p->payload;
     od_hex_dump(ptr, n < 128 ? n : 128, 0);
 #ifdef BOARD_LORA3A_SENSOR1

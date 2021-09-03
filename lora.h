@@ -1,7 +1,7 @@
 #ifndef LORA_H
 #define LORA_H
 
-typedef void (lora_data_cb_t)(const char *buffer, size_t len);
+typedef void (lora_data_cb_t)(const char *buffer, size_t len, uint8_t *rssi, int8_t *snr);
 
 typedef struct {
     uint8_t bandwidth;
