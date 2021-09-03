@@ -13,6 +13,9 @@
 #include "periph/rtc_mem.h"
 
 #include "hdc2021.h"
+#ifdef DEBUG_SAML21
+#include "debug_saml21.h"
+#endif
 #endif
 
 #include "common.h"
@@ -121,6 +124,8 @@ void send_measures(void)
     // send packet
     char message[MAX_PAYLOAD_LEN];
     snprintf(message, MAX_PAYLOAD_LEN, "cpuid=%s vcc=%ld vpanel=%ld temp=%.2f hum=%.2f", cpuid_str, vcc, vpanel, temp, hum);
+    puts("Sending packet:");
+    printf("%s\n", message);
     send_to(EMB_BROADCAST, message, strlen(message));
 }
 
@@ -138,6 +143,9 @@ void backup_mode(uint32_t seconds)
     puts("Now entering backup mode.");
     // turn off radio
     lora_off();
+#ifdef DEBUG_SAML21
+    debug_saml21();
+#endif
     // turn off PORT pins
     size_t num = sizeof(PORT->Group)/sizeof(PortGroup);
     size_t num1 = sizeof(PORT->Group[0].PINCFG)/sizeof(PORT_PINCFG_Type);
@@ -173,13 +181,13 @@ int main(void)
 #ifdef BOARD_LORA3A_SENSOR1
     send_measures();
     lora_listen();
-    ztimer_sleep(ZTIMER_MSEC, 1000);
+    ztimer_sleep(ZTIMER_MSEC, 100);
     // hold the mutex: don't parse packets because we're going to sleep
     mutex_lock(&sleep_lock);
     // read the sleep interval duration from rtc_mem
     uint32_t seconds;
     rtc_mem_read(0, (char *)&seconds, sizeof(seconds));
-    printf("Sleep value: %lu seconds\n", seconds);
+    if (seconds) { printf("Sleep value from RTC: %lu seconds\n", seconds); }
     seconds = (seconds > 0) && (seconds < 120) ? seconds : 5;
     // enter deep sleep
     backup_mode(seconds);
