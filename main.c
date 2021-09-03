@@ -43,6 +43,10 @@ static uint32_t num_messages = 0;
 #define EMB_NETWORK 1
 #endif
 
+#ifndef LISTEN_TIME_MSEC
+#define LISTEN_TIME_MSEC 60
+#endif
+
 static uint16_t emb_counter = 0;
 
 void send_to(uint8_t dst, char *buffer, size_t len)
@@ -96,6 +100,7 @@ ssize_t packet_received(const void *buffer, size_t len)
     puts("Sending packet:");
     printf("%s\n", command);
     send_to(h.src, command, strlen(command));
+    puts("Sent.");
 #endif
 #endif
     return 0;
@@ -127,6 +132,7 @@ void send_measures(void)
     puts("Sending packet:");
     printf("%s\n", message);
     send_to(EMB_BROADCAST, message, strlen(message));
+    puts("Sent.");
 }
 
 void backup_mode(uint32_t seconds)
@@ -181,7 +187,7 @@ int main(void)
 #ifdef BOARD_LORA3A_SENSOR1
     send_measures();
     lora_listen();
-    ztimer_sleep(ZTIMER_MSEC, 100);
+    ztimer_sleep(ZTIMER_MSEC, LISTEN_TIME_MSEC);
     // hold the mutex: don't parse packets because we're going to sleep
     mutex_lock(&sleep_lock);
     // read the sleep interval duration from rtc_mem
