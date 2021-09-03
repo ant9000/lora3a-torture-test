@@ -96,7 +96,7 @@ ssize_t packet_received(const void *buffer, size_t len)
 #else
 #ifdef BOARD_LORA3A_DONGLE
     // send command
-    char command[] = "@1$";
+    char command[] = "@60$";
     puts("Sending packet:");
     printf("%s\n", command);
     send_to(h.src, command, strlen(command));
@@ -107,6 +107,10 @@ ssize_t packet_received(const void *buffer, size_t len)
 }
 
 #ifdef BOARD_LORA3A_SENSOR1
+uint8_t lowpowerVpanel = 0;
+uint8_t lowpowerVcc = 0;
+
+
 void send_measures(void)
 {
     // get cpuid
@@ -117,11 +121,13 @@ void send_measures(void)
     cpuid_str[CPUID_LEN*2]='\0';
     // read vcc
     int32_t vcc = adc_sample(0, ADC_RES_12BIT);
+    lowpowerVcc = (vcc < 2900) ? 1 : 0; 
     // read vpanel
     gpio_init(GPIO_PIN(PA, 19), GPIO_OUT);
     gpio_set(GPIO_PIN(PA, 19));
     ztimer_sleep(ZTIMER_MSEC, 10);
     int32_t vpanel = adc_sample(1, ADC_RES_12BIT);
+    lowpowerVpanel = (vpanel < 2000) ? 1 : 0; 
     gpio_clear(GPIO_PIN(PA, 19));
     // read temp, hum
     double temp=0, hum=0;
@@ -184,6 +190,7 @@ int main(void)
     packet_consumer = *packet_received;
     if (lora_init(&(lora)) != 0) { return 1; }
 
+
 #ifdef BOARD_LORA3A_SENSOR1
     send_measures();
     lora_listen();
@@ -194,7 +201,10 @@ int main(void)
     uint32_t seconds;
     rtc_mem_read(0, (char *)&seconds, sizeof(seconds));
     if (seconds) { printf("Sleep value from RTC: %lu seconds\n", seconds); }
-    seconds = (seconds > 0) && (seconds < 120) ? seconds : 5;
+    seconds = (seconds > 0) && (seconds < 1000) ? seconds : 5;
+    seconds = lowpowerVcc ? seconds*4 : seconds;
+    seconds = lowpowerVpanel ? seconds*5 : seconds;
+    if (seconds) { printf("Sleep value from RTC: %lu seconds; lowpowerVcc = %d; lowpowerVpanel = %d\n", seconds, lowpowerVcc, lowpowerVpanel); }
     // enter deep sleep
     backup_mode(seconds);
 #else
