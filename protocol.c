@@ -12,21 +12,30 @@
 
 extern consume_data_cb_t *packet_consumer;
 
-mutex_t lora_write_lock = MUTEX_INIT;
-mutex_t lora_read_lock = MUTEX_INIT;
+static mutex_t lora_lock = MUTEX_INIT;
+
+void lora_acquire(void)
+{
+    mutex_lock(&lora_lock);
+}
+
+void lora_release(void)
+{
+    mutex_unlock(&lora_lock);
+}
 
 void from_lora(const char *buffer, size_t len)
 {
-    mutex_lock(&lora_read_lock);
+    lora_acquire();
     HEXDUMP("RECEIVED PACKET:", buffer, len);
     packet_consumer((char *)buffer, len);
-    mutex_unlock(&lora_read_lock);
+    lora_release();
 }
 
 void to_lora(const char *buffer, size_t len)
 {
-    mutex_lock(&lora_write_lock);
+    lora_acquire();
     HEXDUMP("SENDING PACKET:", buffer, len);
     lora_write((char *)buffer, len);
-    mutex_unlock(&lora_write_lock);
+    lora_release();
 }
