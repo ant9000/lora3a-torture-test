@@ -18,4 +18,9 @@ USEMODULE += periph_rtt
 USEMODULE += periph_rtc_mem
 USEMODULE += periph_spi_reconfigure
 
+ifneq (,$(filter lora3a-sensor1,$(BOARD)))
+  ADDRESS ?= 1
+  CFLAGS += -DEMB_ADDRESS=$(ADDRESS)
+endif
+
 include $(RIOTBASE)/Makefile.include
