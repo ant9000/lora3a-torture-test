@@ -56,8 +56,9 @@ static struct {
 #ifndef EMB_ADDRESS
 #define EMB_ADDRESS 254
 #endif
-static uint32_t num_messages[255];
+static uint16_t num_messages[255];
 static uint16_t last_message_no[255];
+static uint16_t lost_messages[255];
 #endif
 
 #ifndef EMB_NETWORK
@@ -106,8 +107,10 @@ ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *s
     // dump message to stdout
 #ifdef BOARD_LORA3A_DONGLE
     num_messages[h.src]++;
+    if ((uint32_t)h.counter > (uint32_t)(last_message_no[h.src] + 1)) {
+        lost_messages[h.src] += h.counter - last_message_no[h.src] - 1;
+    }
     last_message_no[h.src] = h.counter;
-    printf("Num messages received: %ld, last message: %u\n", num_messages[h.src], last_message_no[h.src]);
 #endif
     char *ptr = p->payload;
     printf("{\"CNT\":%u,\"NET\":%u,\"DST\":%u,\"SRC\":%u,\"RSSI\":%d,\"SNR\":%d,\"DATA\"=\"%s\"}\n", h.counter, h.network, h.dst, h.src, *rssi, *snr, ptr);
@@ -136,6 +139,30 @@ ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *s
     return 0;
 }
 
+#ifdef BOARD_LORA3A_DONGLE
+void print_stats(void)
+{
+    uint8_t nodes=0;
+    uint32_t received=0, lost=0;
+    puts("# --------------------------------------");
+    for (int src=0; src<255; src++) {
+        if (num_messages[src]) {
+            nodes++;
+            received += num_messages[src];
+            lost += lost_messages[src];
+            printf(
+                "# SRC 0x%02X: messages received: %u, last message: %u, lost messages: %u\n",
+                src, num_messages[src], last_message_no[src], lost_messages[src]
+            );
+        }
+    }
+    printf(
+        "# TOTAL: nodes: %d, received messages: %lu, lost messages: %lu\n",
+        nodes, received, lost
+    );
+    puts("# --------------------------------------");
+}
+#endif
 #ifdef BOARD_LORA3A_SENSOR1
 void read_measures(void)
 {
@@ -263,9 +290,12 @@ int main(void)
 #ifdef BOARD_LORA3A_DONGLE
     memset(num_messages, 0, sizeof(num_messages));
     memset(last_message_no, 0, sizeof(last_message_no));
+    memset(lost_messages, 0, sizeof(lost_messages));
     lora_listen();
-    // do nothing
-    thread_sleep();
+    for (;;) {
+        print_stats();
+        ztimer_sleep(ZTIMER_MSEC, 60000);
+    }
 #endif
 #endif
     return 0;
