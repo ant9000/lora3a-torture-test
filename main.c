@@ -250,15 +250,19 @@ int main(void)
 
 
 #ifdef BOARD_LORA3A_SENSOR1
-    // read persistent values
-    rtc_mem_read(0, (char *)&persist, sizeof(persist));
-    bool empty = 1;
-    for (uint8_t i=0; (empty == 1) && (i < sizeof(persist)); i++) {
-        empty = ((char *)&persist)[i] == 0;
-    }
-    if (!empty) {
-        emb_counter = persist.message_counter;
-        lora_set_power(persist.tx_power);
+    if (RSTC->RCAUSE.reg == RSTC_RCAUSE_BACKUP) {
+        // read persistent values
+        rtc_mem_read(0, (char *)&persist, sizeof(persist));
+        bool empty = 1;
+        for (uint8_t i=0; (empty == 1) && (i < sizeof(persist)); i++) {
+            empty = ((char *)&persist)[i] == 0;
+        }
+        if (!empty) {
+            emb_counter = persist.message_counter;
+            lora_set_power(persist.tx_power);
+        }
+    } else {
+        memset(&persist, 0, sizeof(persist));
     }
     read_measures();
     send_measures();
