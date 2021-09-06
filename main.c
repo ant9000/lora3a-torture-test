@@ -124,23 +124,26 @@ void send_measures(void)
     cpuid_str[CPUID_LEN*2]='\0';
     // read vcc
     int32_t vcc = adc_sample(0, ADC_RES_12BIT);
-    lowpowerVcc = (vcc < 2900) ? 1 : 0; 
+    lowpowerVcc = (vcc < 2900) ? 1 : 0;
     // read vpanel
     gpio_init(GPIO_PIN(PA, 19), GPIO_OUT);
     gpio_set(GPIO_PIN(PA, 19));
     ztimer_sleep(ZTIMER_MSEC, 10);
     int32_t vpanel = adc_sample(1, ADC_RES_12BIT);
-    lowpowerVpanel = (vpanel < 2000) ? 1 : 0; 
+    lowpowerVpanel = (vpanel < 2000) ? 1 : 0;
     gpio_clear(GPIO_PIN(PA, 19));
     // read temp, hum
     double temp=0, hum=0;
     read_hdc2021(&temp, &hum);
+    // read tx power
+    uint8_t pow = lora_get_power();
     // send packet
     char message[MAX_PAYLOAD_LEN];
-    snprintf(message, MAX_PAYLOAD_LEN, "cpuid:%s,vcc:%ld,vpanel:%ld,temp:%.2f,hum:%.2f", cpuid_str, vcc, vpanel, temp, hum);
+    snprintf(message, MAX_PAYLOAD_LEN, "cpuid:%s,vcc:%ld,vpanel:%ld,temp:%.2f,hum:%.2f,pow:%d", cpuid_str, vcc, vpanel, temp, hum, pow);
+    size_t len = strlen(message);
     puts("Sending packet:");
-    printf("%s\n", message);
-    send_to(EMB_BROADCAST, message, strlen(message));
+    printf("[%d]%s\n", len, message);
+    send_to(EMB_BROADCAST, message, len);
     puts("Sent.");
 }
 
