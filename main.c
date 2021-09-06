@@ -55,8 +55,8 @@ static struct {
 #ifndef EMB_ADDRESS
 #define EMB_ADDRESS 254
 #endif
-static uint32_t num_messages = 0;
-static uint16_t last_message_no = 0;
+static uint32_t num_messages[255];
+static uint16_t last_message_no[255];
 #endif
 
 #ifndef EMB_NETWORK
@@ -104,9 +104,9 @@ ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *s
 
     // dump message to stdout
 #ifdef BOARD_LORA3A_DONGLE
-    num_messages++;
-    last_message_no = h.counter;
-    printf("Num messages received: %ld, last message: %u\n", num_messages, last_message_no);
+    num_messages[h.src]++;
+    last_message_no[h.src] = h.counter;
+    printf("Num messages received: %ld, last message: %u\n", num_messages[h.src], last_message_no[h.src]);
 #endif
     char *ptr = p->payload;
     printf("{\"CNT\":%u,\"NET\":%u,\"DST\":%u,\"SRC\":%u,\"RSSI\":%d,\"SNR\":%d,\"DATA\"=\"%s\"}\n", h.counter, h.network, h.dst, h.src, *rssi, *snr, ptr);
@@ -252,6 +252,8 @@ int main(void)
     backup_mode(seconds);
 #else
 #ifdef BOARD_LORA3A_DONGLE
+    memset(num_messages, 0, sizeof(num_messages));
+    memset(last_message_no, 0, sizeof(last_message_no));
     lora_listen();
     // do nothing
     thread_sleep();
