@@ -1,5 +1,4 @@
 #include "thread.h"
-#include "net/netdev.h"
 #include "net/netdev/lora.h"
 
 #include "sx127x_internal.h"
@@ -62,17 +61,14 @@ void lora_off(void)
     spi_deinit_pins(sx127x.params.spi);
 }
 
-int lora_write(char *msg, size_t len)
+int lora_write(const iolist_t *packet)
 {
-    iolist_t payload = {
-        .iol_base = msg,
-        .iol_len = len,
-    };
     netdev_t *netdev = (netdev_t *)&sx127x;
+    uint8_t len = iolist_size(packet);
     // wait for radio to stop transmitting
-    while (netdev->driver->send(netdev, &payload) == -ENOTSUP) { ztimer_sleep(ZTIMER_USEC, 10); }
+    while (netdev->driver->send(netdev, packet) == -ENOTSUP) { ztimer_sleep(ZTIMER_USEC, 10); }
     // wait for end of transmission, adding a few usecs to time on air
-    uint32_t delay = sx127x_get_time_on_air(&sx127x, iolist_size(&payload));
+    uint32_t delay = sx127x_get_time_on_air(&sx127x, len);
     ztimer_sleep(ZTIMER_USEC, delay * 1000 + 10);
 
     return len;
@@ -87,6 +83,16 @@ void lora_listen(void)
     netdev->driver->set(netdev, NETOPT_RX_TIMEOUT, &timeout, sizeof(timeout));
     netopt_state_t state = NETOPT_STATE_RX;
     netdev->driver->set(netdev, NETOPT_STATE, &state, sizeof(state));
+}
+
+uint8_t lora_get_power(void)
+{
+    return sx127x_get_tx_power(&sx127x);
+}
+
+void lora_set_power(uint8_t power)
+{
+    sx127x_set_tx_power(&sx127x, power);
 }
 
 static void _lora_rx_cb(netdev_t *dev, netdev_event_t event)

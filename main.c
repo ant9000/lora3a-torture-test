@@ -51,15 +51,20 @@ static uint16_t emb_counter = 0;
 
 void send_to(uint8_t dst, char *buffer, size_t len)
 {
-    char packet_buffer[MAX_PACKET_LEN];
-    embit_packet_t *p = (embit_packet_t *)packet_buffer;
-    p->header.signature = EMB_SIGNATURE;
-    p->header.counter = emb_counter++;
-    p->header.network = EMB_NETWORK;
-    p->header.dst = dst;
-    p->header.src = EMB_ADDRESS;
-    memcpy(p->payload, buffer, len);
-    to_lora(packet_buffer, EMB_HEADER_LEN+len);
+    embit_header_t h;
+    h.signature = EMB_SIGNATURE;
+    h.counter = emb_counter++;
+    h.network = EMB_NETWORK;
+    h.dst = dst;
+    h.src = EMB_ADDRESS;
+    iolist_t packet, payload;
+    packet.iol_base = &h;
+    packet.iol_len = sizeof(h);
+    packet.iol_next = &payload;
+    payload.iol_base = buffer;
+    payload.iol_len = len;
+    payload.iol_next = NULL;
+    to_lora((const iolist_t *)&packet);
 }
 
 ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *snr)

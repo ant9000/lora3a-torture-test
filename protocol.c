@@ -2,11 +2,8 @@
 #include "fmt.h"
 #include "od.h"
 
+#include "net/netdev.h"
 #include "mutex.h"
-
-#define ENABLE_DEBUG 0
-#include "debug.h"
-#define HEXDUMP(msg, buffer, len) if (ENABLE_DEBUG) { puts(msg); od_hex_dump((char *)buffer, len, 0); }
 
 #include "common.h"
 
@@ -18,15 +15,13 @@ mutex_t lora_read_lock = MUTEX_INIT;
 void from_lora(const char *buffer, size_t len, uint8_t *rssi, int8_t *snr)
 {
     mutex_lock(&lora_read_lock);
-    HEXDUMP("RECEIVED PACKET:", buffer, len);
     packet_consumer((char *)buffer, len, rssi, snr);
     mutex_unlock(&lora_read_lock);
 }
 
-void to_lora(const char *buffer, size_t len)
+void to_lora(const iolist_t *packet)
 {
     mutex_lock(&lora_write_lock);
-    HEXDUMP("SENDING PACKET:", buffer, len);
-    lora_write((char *)buffer, len);
+    lora_write(packet);
     mutex_unlock(&lora_write_lock);
 }
