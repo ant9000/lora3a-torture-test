@@ -39,6 +39,7 @@ static struct {
     uint16_t message_counter;
     uint8_t last_rssi;
     int8_t last_snr;
+    uint8_t tx_power;
 } persist;
 
 static struct {
@@ -114,7 +115,7 @@ ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *s
     // hold the mutex: don't enter sleep yet, we need to do some work
     mutex_lock(&sleep_lock);
     // parse command
-    if((ptr[0] == '@') && (ptr[n-1] == '$')) {
+    if((n > 2) && (strlen(ptr) == (size_t)(n-1)) && (ptr[0] == '@') && (ptr[n-2] == '$')) {
         uint32_t seconds = strtoul(ptr+1, NULL, 0);
         printf("Instructed to sleep for %lu seconds\n", seconds);
         persist.sleep_seconds = seconds;
@@ -129,7 +130,7 @@ ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *s
 #ifdef BOARD_LORA3A_DONGLE
     // send command
     char command[] = "@10$";
-    send_to(h.src, command, strlen(command));
+    send_to(h.src, command, strlen(command)+1);
 #endif
 #endif
     return 0;
@@ -168,7 +169,7 @@ void send_measures(void)
         cpuid, measures.vcc, measures.vpanel, measures.temp,
         measures.hum, measures.pow
     );
-    send_to(EMB_BROADCAST, message, strlen(message));
+    send_to(EMB_BROADCAST, message, strlen(message)+1);
 }
 
 void backup_mode(uint32_t seconds)
@@ -224,7 +225,14 @@ int main(void)
 #ifdef BOARD_LORA3A_SENSOR1
     // read persistent values
     rtc_mem_read(0, (char *)&persist, sizeof(persist));
-    emb_counter = persist.message_counter;
+    bool empty = 1;
+    for (uint8_t i=0; (empty == 1) && (i < sizeof(persist)); i++) {
+        empty = ((char *)&persist)[i] == 0;
+    }
+    if (!empty) {
+        emb_counter = persist.message_counter;
+        lora_set_power(persist.tx_power);
+    }
     read_measures();
     send_measures();
     lora_listen();
@@ -247,6 +255,7 @@ int main(void)
     }
     // save persistent values
     persist.message_counter = emb_counter;
+    persist.tx_power = lora_get_power();
     rtc_mem_write(0, (char *)&persist, sizeof(persist));
     // enter deep sleep
     backup_mode(seconds);
