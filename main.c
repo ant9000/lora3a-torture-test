@@ -18,6 +18,10 @@
 #endif
 #endif
 
+#ifdef BOARD_LORA3A_DONGLE
+#include "thread.h"
+#endif
+
 #include "common.h"
 #include "protocol.h"
 
@@ -30,6 +34,21 @@ static mutex_t sleep_lock = MUTEX_INIT;
 #ifndef EMB_ADDRESS
 #define EMB_ADDRESS 1
 #endif
+static struct {
+    uint32_t sleep_seconds;
+    uint16_t message_counter;
+    uint8_t last_rssi;
+    int8_t last_snr;
+} persist;
+
+static struct {
+    uint8_t cpuid[CPUID_LEN];
+    int32_t vcc;
+    int32_t vpanel;
+    double temp;
+    double hum;
+    uint8_t pow;
+} measures;
 #endif
 
 #ifdef BOARD_LORA3A_DONGLE
@@ -37,6 +56,7 @@ static mutex_t sleep_lock = MUTEX_INIT;
 #define EMB_ADDRESS 254
 #endif
 static uint32_t num_messages = 0;
+static uint16_t last_message_no = 0;
 #endif
 
 #ifndef EMB_NETWORK
@@ -53,7 +73,7 @@ void send_to(uint8_t dst, char *buffer, size_t len)
 {
     embit_header_t h;
     h.signature = EMB_SIGNATURE;
-    h.counter = emb_counter++;
+    h.counter = ++emb_counter;
     h.network = EMB_NETWORK;
     h.dst = dst;
     h.src = EMB_ADDRESS;
@@ -64,7 +84,10 @@ void send_to(uint8_t dst, char *buffer, size_t len)
     payload.iol_base = buffer;
     payload.iol_len = len;
     payload.iol_next = NULL;
+    printf("Sending packet #%u to 0x%02X:\n", emb_counter, dst);
+    printf("%s\n", buffer);
     to_lora((const iolist_t *)&packet);
+    puts("Sent.");
 }
 
 ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *snr)
@@ -81,7 +104,9 @@ ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *s
 
     // dump message to stdout
 #ifdef BOARD_LORA3A_DONGLE
-    printf("Num messages received: %ld\n", ++num_messages);
+    num_messages++;
+    last_message_no = h.counter;
+    printf("Num messages received: %ld, last message: %u\n", num_messages, last_message_no);
 #endif
     char *ptr = p->payload;
     printf("{\"CNT\":%u,\"NET\":%u,\"DST\":%u,\"SRC\":%u,\"RSSI\":%d,\"SNR\":%d,\"DATA\"=\"%s\"}\n", h.counter, h.network, h.dst, h.src, *rssi, *snr, ptr);
@@ -92,59 +117,58 @@ ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *s
     if((ptr[0] == '@') && (ptr[n-1] == '$')) {
         uint32_t seconds = strtoul(ptr+1, NULL, 0);
         printf("Instructed to sleep for %lu seconds\n", seconds);
-        rtc_mem_write(0, (char *)&seconds, sizeof(seconds));
+        persist.sleep_seconds = seconds;
+    } else {
+        persist.sleep_seconds = 0;
     }
+    persist.last_rssi = *rssi;
+    persist.last_snr = *snr;
     // release the mutex
     mutex_unlock(&sleep_lock);
 #else
 #ifdef BOARD_LORA3A_DONGLE
     // send command
     char command[] = "@10$";
-    puts("Sending packet:");
-    printf("%s\n", command);
     send_to(h.src, command, strlen(command));
-    puts("Sent.");
 #endif
 #endif
     return 0;
 }
 
 #ifdef BOARD_LORA3A_SENSOR1
-uint8_t lowpowerVpanel = 0;
-uint8_t lowpowerVcc = 0;
-
-
-void send_measures(void)
+void read_measures(void)
 {
     // get cpuid
-    uint8_t cpuid[CPUID_LEN];
-    char cpuid_str[CPUID_LEN*2+1];
-    cpuid_get(&cpuid);
-    fmt_bytes_hex(cpuid_str, cpuid, CPUID_LEN);
-    cpuid_str[CPUID_LEN*2]='\0';
+    cpuid_get(&measures.cpuid);
     // read vcc
-    int32_t vcc = adc_sample(0, ADC_RES_12BIT);
-    lowpowerVcc = (vcc < 2900) ? 1 : 0;
+    measures.vcc = adc_sample(0, ADC_RES_12BIT);
     // read vpanel
     gpio_init(GPIO_PIN(PA, 19), GPIO_OUT);
     gpio_set(GPIO_PIN(PA, 19));
     ztimer_sleep(ZTIMER_MSEC, 10);
-    int32_t vpanel = adc_sample(1, ADC_RES_12BIT);
-    lowpowerVpanel = (vpanel < 2000) ? 1 : 0;
+    measures.vpanel = adc_sample(1, ADC_RES_12BIT);
     gpio_clear(GPIO_PIN(PA, 19));
     // read temp, hum
-    double temp=0, hum=0;
-    read_hdc2021(&temp, &hum);
+    measures.temp=0;
+    measures.hum=0;
+    read_hdc2021(&measures.temp, &measures.hum);
     // read tx power
-    uint8_t pow = lora_get_power();
-    // send packet
+    measures.pow = lora_get_power();
+}
+
+void send_measures(void)
+{
+    char cpuid[CPUID_LEN*2+1];
     char message[MAX_PAYLOAD_LEN];
-    snprintf(message, MAX_PAYLOAD_LEN, "cpuid:%s,vcc:%ld,vpanel:%ld,temp:%.2f,hum:%.2f,pow:%d", cpuid_str, vcc, vpanel, temp, hum, pow);
-    size_t len = strlen(message);
-    puts("Sending packet:");
-    printf("[%d]%s\n", len, message);
-    send_to(EMB_BROADCAST, message, len);
-    puts("Sent.");
+    fmt_bytes_hex(cpuid, measures.cpuid, CPUID_LEN);
+    cpuid[CPUID_LEN*2]='\0';
+    snprintf(
+        message, MAX_PAYLOAD_LEN,
+        "cpuid:%s,vcc:%ld,vpanel:%ld,temp:%.2f,hum:%.2f,pow:%d",
+        cpuid, measures.vcc, measures.vpanel, measures.temp,
+        measures.hum, measures.pow
+    );
+    send_to(EMB_BROADCAST, message, strlen(message));
 }
 
 void backup_mode(uint32_t seconds)
@@ -198,27 +222,39 @@ int main(void)
 
 
 #ifdef BOARD_LORA3A_SENSOR1
+    // read persistent values
+    rtc_mem_read(0, (char *)&persist, sizeof(persist));
+    emb_counter = persist.message_counter;
+    read_measures();
     send_measures();
     lora_listen();
     ztimer_sleep(ZTIMER_MSEC, LISTEN_TIME_MSEC);
     // hold the mutex: don't parse packets because we're going to sleep
     mutex_lock(&sleep_lock);
-    // read the sleep interval duration from rtc_mem
-    uint32_t seconds;
-    rtc_mem_read(0, (char *)&seconds, sizeof(seconds));
-    if (seconds) { printf("Sleep value from RTC: %lu seconds\n", seconds); }
+    // adjust sleep interval according to available energy
+    uint32_t seconds = persist.sleep_seconds;
+    if (seconds) { printf("Sleep value from persistence: %lu seconds\n", seconds); }
     seconds = (seconds > 0) && (seconds < 1000) ? seconds : 5;
+    uint8_t lowpowerVcc = (measures.vcc < 2900) ? 1 : 0;
+    uint8_t lowpowerVpanel = (measures.vpanel < 2000) ? 1 : 0;
     seconds = lowpowerVcc ? seconds*4 : seconds;
     seconds = lowpowerVpanel ? seconds*5 : seconds;
-    if (seconds) { printf("Sleep value from RTC: %lu seconds; lowpowerVcc = %d; lowpowerVpanel = %d\n", seconds, lowpowerVcc, lowpowerVpanel); }
+    if (seconds) {
+        printf(
+            "Sleep value from RTC: %lu seconds; lpVcc = %d; lpVpanel = %d\n",
+            seconds, lowpowerVcc, lowpowerVpanel
+        );
+    }
+    // save persistent values
+    persist.message_counter = emb_counter;
+    rtc_mem_write(0, (char *)&persist, sizeof(persist));
     // enter deep sleep
     backup_mode(seconds);
 #else
 #ifdef BOARD_LORA3A_DONGLE
     lora_listen();
-    for (;;) {
-        // do nothing
-    }
+    // do nothing
+    thread_sleep();
 #endif
 #endif
     return 0;
