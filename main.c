@@ -78,10 +78,12 @@ ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *s
 #ifdef BOARD_LORA3A_DONGLE
     printf("Num messages received: %ld\n", ++num_messages);
 #endif
-    puts("Received packet:");
-    printf("CNT:%u NET:%u DST:%u SRC:%u RSSI:%d SNR:%d\n", h.counter, h.network, h.dst, h.src, *rssi, *snr);
+//    puts("Received packet:");
+//    printf("CNT:%u, NET:%u, DST:%u, SRC:%u, RSSI:%d, SNR:%d, ", h.counter, h.network, h.dst, h.src, *rssi, *snr);
     char *ptr = p->payload;
-    od_hex_dump(ptr, n < 128 ? n : 128, 0);
+    printf("[CNT:%u,NET:%u,DST:%u,SRC:%u,RSSI:%d,SNR:%d,%s]\n", h.counter, h.network, h.dst, h.src, *rssi, *snr,ptr);
+//    printf("%s\n", ptr);
+//    od_hex_dump(ptr, n < 128 ? n : 128, 0);
 #ifdef BOARD_LORA3A_SENSOR1
     // hold the mutex: don't enter sleep yet, we need to do some work
     mutex_lock(&sleep_lock);
@@ -96,7 +98,7 @@ ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *s
 #else
 #ifdef BOARD_LORA3A_DONGLE
     // send command
-    char command[] = "@60$";
+    char command[] = "@10$";
     puts("Sending packet:");
     printf("%s\n", command);
     send_to(h.src, command, strlen(command));
@@ -134,7 +136,7 @@ void send_measures(void)
     read_hdc2021(&temp, &hum);
     // send packet
     char message[MAX_PAYLOAD_LEN];
-    snprintf(message, MAX_PAYLOAD_LEN, "cpuid=%s vcc=%ld vpanel=%ld temp=%.2f hum=%.2f", cpuid_str, vcc, vpanel, temp, hum);
+    snprintf(message, MAX_PAYLOAD_LEN, "cpuid:%s,vcc:%ld,vpanel:%ld,temp:%.2f,hum:%.2f", cpuid_str, vcc, vpanel, temp, hum);
     puts("Sending packet:");
     printf("%s\n", message);
     send_to(EMB_BROADCAST, message, strlen(message));
