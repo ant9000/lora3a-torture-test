@@ -136,7 +136,7 @@ ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *s
 #else
 #ifdef BOARD_LORA3A_DONGLE
     // send command
-    char command[] = "@10$";
+    char command[] = "@20$"; // sleep for 20 seconds
     send_to(h.src, command, strlen(command)+1);
 #endif
 #endif
