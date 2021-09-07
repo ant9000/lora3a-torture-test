@@ -186,21 +186,6 @@ void read_measures(void)
     read_hdc2021(&measures.temp, &measures.hum);
 }
 
-void send_measures(void)
-{
-    char cpuid[CPUID_LEN*2+1];
-    char message[MAX_PAYLOAD_LEN];
-    fmt_bytes_hex(cpuid, measures.cpuid, CPUID_LEN);
-    cpuid[CPUID_LEN*2]='\0';
-    snprintf(
-        message, MAX_PAYLOAD_LEN,
-        "cpuid:%s,vcc:%ld,vpanel:%ld,temp:%.2f,hum:%.2f,txpower:%d,sleep:%u",
-        cpuid, measures.vcc, measures.vpanel, measures.temp,
-        measures.hum, persist.tx_power, persist.sleep_seconds
-    );
-    send_to(EMB_BROADCAST, message, strlen(message)+1);
-}
-
 void backup_mode(uint32_t seconds)
 {
     uint8_t extwake = 6;
@@ -282,16 +267,27 @@ int main(void)
         seconds = seconds * 5 < 0xffff ? seconds * 5 : 0xffff;
     }
     if (persist.sleep_seconds != seconds) {
-        persist.sleep_seconds = (uint16_t)(seconds & 0xffff);
         printf(
-            "Adjusted sleep value: %u seconds; lpVcc = %d; lpVpanel = %d\n",
-            persist.sleep_seconds, lpVcc, lpVpanel
+            "Adjusted sleep value: %lu seconds; lpVcc = %d; lpVpanel = %d\n",
+            seconds, lpVcc, lpVpanel
         );
     }
-    send_measures();
+    // send measures
+    char cpuid[CPUID_LEN*2+1];
+    char message[MAX_PAYLOAD_LEN];
+    fmt_bytes_hex(cpuid, measures.cpuid, CPUID_LEN);
+    cpuid[CPUID_LEN*2]='\0';
+    snprintf(
+        message, MAX_PAYLOAD_LEN,
+        "cpuid:%s,vcc:%ld,vpanel:%ld,temp:%.2f,hum:%.2f,txpower:%d,sleep:%lu",
+        cpuid, measures.vcc, measures.vpanel, measures.temp,
+        measures.hum, persist.tx_power, seconds
+    );
+    send_to(EMB_BROADCAST, message, strlen(message)+1);
+    // wait for commands
     lora_listen();
     ztimer_sleep(ZTIMER_MSEC, LISTEN_TIME_MSEC);
-    // hold the mutex: don't parse packets because we're going to sleep
+    // hold the mutex: don't parse more packets now, because we're going to sleep
     mutex_lock(&sleep_lock);
     // save persistent values
     persist.message_counter = emb_counter;
