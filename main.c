@@ -34,8 +34,14 @@ static mutex_t sleep_lock = MUTEX_INIT;
 #ifndef EMB_ADDRESS
 #define EMB_ADDRESS 1
 #endif
+#ifndef SLEEP_TIME_SEC
+#define SLEEP_TIME_SEC 5
+#endif
+#ifndef LISTEN_TIME_MSEC
+#define LISTEN_TIME_MSEC 60
+#endif
 static struct {
-    uint32_t sleep_seconds;
+    uint16_t sleep_seconds;
     uint16_t message_counter;
     uint8_t last_rssi;
     int8_t last_snr;
@@ -48,7 +54,6 @@ static struct {
     int32_t vpanel;
     double temp;
     double hum;
-    uint8_t pow;
 } measures;
 #endif
 
@@ -63,10 +68,6 @@ static uint16_t lost_messages[255];
 
 #ifndef EMB_NETWORK
 #define EMB_NETWORK 1
-#endif
-
-#ifndef LISTEN_TIME_MSEC
-#define LISTEN_TIME_MSEC 60
 #endif
 
 static uint16_t emb_counter = 0;
@@ -86,7 +87,7 @@ void send_to(uint8_t dst, char *buffer, size_t len)
     payload.iol_base = buffer;
     payload.iol_len = len;
     payload.iol_next = NULL;
-    printf("Sending packet #%u to 0x%02X:\n", emb_counter, dst);
+    printf("Sending %d+%d bytes packet #%u to 0x%02X:\n", sizeof(h), len, emb_counter, dst);
     printf("%s\n", buffer);
     to_lora((const iolist_t *)&packet);
     puts("Sent.");
@@ -121,9 +122,12 @@ ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *s
     if((n > 2) && (strlen(ptr) == (size_t)(n-1)) && (ptr[0] == '@') && (ptr[n-2] == '$')) {
         uint32_t seconds = strtoul(ptr+1, NULL, 0);
         printf("Instructed to sleep for %lu seconds\n", seconds);
-        persist.sleep_seconds = seconds;
+        persist.sleep_seconds = (seconds > 0 ) && (seconds < 36000) ? (uint16_t)seconds : SLEEP_TIME_SEC;
+        if ((uint32_t)persist.sleep_seconds != seconds) {
+            printf("Corrected sleep value: %u seconds\n", persist.sleep_seconds);
+        }
     } else {
-        persist.sleep_seconds = 0;
+        persist.sleep_seconds = SLEEP_TIME_SEC;
     }
     persist.last_rssi = *rssi;
     persist.last_snr = *snr;
@@ -180,8 +184,6 @@ void read_measures(void)
     measures.temp=0;
     measures.hum=0;
     read_hdc2021(&measures.temp, &measures.hum);
-    // read tx power
-    measures.pow = lora_get_power();
 }
 
 void send_measures(void)
@@ -192,9 +194,9 @@ void send_measures(void)
     cpuid[CPUID_LEN*2]='\0';
     snprintf(
         message, MAX_PAYLOAD_LEN,
-        "cpuid:%s,vcc:%ld,vpanel:%ld,temp:%.2f,hum:%.2f,pow:%d",
+        "cpuid:%s,vcc:%ld,vpanel:%ld,temp:%.2f,hum:%.2f,txpower:%d,sleep:%u",
         cpuid, measures.vcc, measures.vpanel, measures.temp,
-        measures.hum, measures.pow
+        measures.hum, persist.tx_power, persist.sleep_seconds
     );
     send_to(EMB_BROADCAST, message, strlen(message)+1);
 }
@@ -263,27 +265,34 @@ int main(void)
         }
     } else {
         memset(&persist, 0, sizeof(persist));
+        persist.sleep_seconds = SLEEP_TIME_SEC;
+        persist.tx_power = lora.power;
     }
     read_measures();
+    // adjust sleep interval according to available energy
+    uint32_t seconds = persist.sleep_seconds;
+    if (seconds) { printf("Sleep value from persistence: %lu seconds\n", seconds); }
+    seconds = (seconds > 0) && (seconds < 36000) ? seconds : SLEEP_TIME_SEC;
+    uint8_t lpVcc = (measures.vcc < 2900) ? 1 : 0;
+    uint8_t lpVpanel = (measures.vpanel < 2000) ? 1 : 0;
+    if (lpVcc) {
+        seconds = seconds * 4 < 0xffff ? seconds * 4 : 0xffff;
+    }
+    if (lpVpanel) {
+        seconds = seconds * 5 < 0xffff ? seconds * 5 : 0xffff;
+    }
+    if (persist.sleep_seconds != seconds) {
+        persist.sleep_seconds = (uint16_t)(seconds & 0xffff);
+        printf(
+            "Adjusted sleep value: %u seconds; lpVcc = %d; lpVpanel = %d\n",
+            persist.sleep_seconds, lpVcc, lpVpanel
+        );
+    }
     send_measures();
     lora_listen();
     ztimer_sleep(ZTIMER_MSEC, LISTEN_TIME_MSEC);
     // hold the mutex: don't parse packets because we're going to sleep
     mutex_lock(&sleep_lock);
-    // adjust sleep interval according to available energy
-    uint32_t seconds = persist.sleep_seconds;
-    if (seconds) { printf("Sleep value from persistence: %lu seconds\n", seconds); }
-    seconds = (seconds > 0) && (seconds < 1000) ? seconds : 5;
-    uint8_t lowpowerVcc = (measures.vcc < 2900) ? 1 : 0;
-    uint8_t lowpowerVpanel = (measures.vpanel < 2000) ? 1 : 0;
-    seconds = lowpowerVcc ? seconds*4 : seconds;
-    seconds = lowpowerVpanel ? seconds*5 : seconds;
-    if (seconds) {
-        printf(
-            "Sleep value from RTC: %lu seconds; lpVcc = %d; lpVpanel = %d\n",
-            seconds, lowpowerVcc, lowpowerVpanel
-        );
-    }
     // save persistent values
     persist.message_counter = emb_counter;
     persist.tx_power = lora_get_power();
