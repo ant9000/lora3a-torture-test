@@ -14,14 +14,29 @@ mutex_t lora_read_lock = MUTEX_INIT;
 
 void from_lora(const char *buffer, size_t len, uint8_t *rssi, int8_t *snr)
 {
+    embit_header_t *header;
+    void *payload;
+    size_t n;
     mutex_lock(&lora_read_lock);
-    packet_consumer((char *)buffer, len, rssi, snr);
+    header = (embit_header_t *)buffer;
+    if ((header->signature == EMB_SIGNATURE) && (len > EMB_HEADER_LEN)) {
+        payload = (char *)buffer + EMB_HEADER_LEN;
+        n = len - EMB_HEADER_LEN;
+        packet_consumer(header, payload, n, rssi, snr);
+    }
     mutex_unlock(&lora_read_lock);
 }
 
-void to_lora(const iolist_t *packet)
+void to_lora(const embit_header_t *header, const char *buffer, const size_t len)
 {
+    iolist_t packet, payload;
     mutex_lock(&lora_write_lock);
-    lora_write(packet);
+    packet.iol_base = (void *)header;
+    packet.iol_len = EMB_HEADER_LEN;
+    packet.iol_next = &payload;
+    payload.iol_base = (void *)buffer;
+    payload.iol_len = len;
+    payload.iol_next = NULL;
+    lora_write(&packet);
     mutex_unlock(&lora_write_lock);
 }

@@ -74,52 +74,42 @@ static uint16_t emb_counter = 0;
 
 void send_to(uint8_t dst, char *buffer, size_t len)
 {
-    embit_header_t h;
-    h.signature = EMB_SIGNATURE;
-    h.counter = ++emb_counter;
-    h.network = EMB_NETWORK;
-    h.dst = dst;
-    h.src = EMB_ADDRESS;
-    iolist_t packet, payload;
-    packet.iol_base = &h;
-    packet.iol_len = sizeof(h);
-    packet.iol_next = &payload;
-    payload.iol_base = buffer;
-    payload.iol_len = len;
-    payload.iol_next = NULL;
-    printf("Sending %d+%d bytes packet #%u to 0x%02X:\n", sizeof(h), len, emb_counter, dst);
+    embit_header_t header;
+    header.signature = EMB_SIGNATURE;
+    header.counter = ++emb_counter;
+    header.network = EMB_NETWORK;
+    header.dst = dst;
+    header.src = EMB_ADDRESS;
+    printf("Sending %d+%d bytes packet #%u to 0x%02X:\n", sizeof(header), len, emb_counter, dst);
     printf("%s\n", buffer);
-    to_lora((const iolist_t *)&packet);
+    to_lora(&header, buffer, len);
     puts("Sent.");
 }
 
-ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *snr)
+ssize_t packet_received(const embit_header_t *header, const void *buffer, size_t len, uint8_t *rssi, int8_t *snr)
 {
-    embit_packet_t *p = (embit_packet_t *)buffer;
-    embit_header_t h = p->header;
-    ssize_t n = len - EMB_HEADER_LEN;
-
-    // discard invalid packets
-    if ((h.signature != EMB_SIGNATURE) || (n <= 0) || (n >= MAX_PAYLOAD_LEN)) { return 0; }
-
     // discard packets if not for us and not broadcast
-    if ((h.dst != EMB_ADDRESS) && (h.dst != EMB_BROADCAST)) { return 0; }
+    if ((header->dst != EMB_ADDRESS) && (header->dst != EMB_BROADCAST)) { return 0; }
 
     // dump message to stdout
+    printf(
+        "{\"CNT\":%u,\"NET\":%u,\"DST\":%u,\"SRC\":%u,\"RSSI\":%d,\"SNR\":%d,\"LEN\"=%d,\"DATA\"=\"%s\"}\n",
+        header->counter, header->network, header->dst, header->src, *rssi, *snr, len, (char *)buffer
+    );
+
 #ifdef BOARD_LORA3A_DONGLE
-    num_messages[h.src]++;
-    if ((uint32_t)h.counter > (uint32_t)(last_message_no[h.src] + 1)) {
-        lost_messages[h.src] += h.counter - last_message_no[h.src] - 1;
+    num_messages[header->src]++;
+    if ((uint32_t)header->counter > (uint32_t)(last_message_no[header->src] + 1)) {
+        lost_messages[header->src] += header->counter - last_message_no[header->src] - 1;
     }
-    last_message_no[h.src] = h.counter;
+    last_message_no[header->src] = header->counter;
 #endif
-    char *ptr = p->payload;
-    printf("{\"CNT\":%u,\"NET\":%u,\"DST\":%u,\"SRC\":%u,\"RSSI\":%d,\"SNR\":%d,\"DATA\"=\"%s\"}\n", h.counter, h.network, h.dst, h.src, *rssi, *snr, ptr);
 #ifdef BOARD_LORA3A_SENSOR1
     // hold the mutex: don't enter sleep yet, we need to do some work
     mutex_lock(&sleep_lock);
     // parse command
-    if((n > 2) && (strlen(ptr) == (size_t)(n-1)) && (ptr[0] == '@') && (ptr[n-2] == '$')) {
+    char *ptr = (char *)buffer;
+    if((len > 2) && (strlen(ptr) == (size_t)(len-1)) && (ptr[0] == '@') && (ptr[len-2] == '$')) {
         uint32_t seconds = strtoul(ptr+1, NULL, 0);
         printf("Instructed to sleep for %lu seconds\n", seconds);
         persist.sleep_seconds = (seconds > 0 ) && (seconds < 36000) ? (uint16_t)seconds : SLEEP_TIME_SEC;
@@ -137,7 +127,7 @@ ssize_t packet_received(const void *buffer, size_t len, uint8_t *rssi, int8_t *s
 #ifdef BOARD_LORA3A_DONGLE
     // send command
     char command[] = "@20$"; // sleep for 20 seconds
-    send_to(h.src, command, strlen(command)+1);
+    send_to(header->src, command, strlen(command)+1);
 #endif
 #endif
     return 0;
