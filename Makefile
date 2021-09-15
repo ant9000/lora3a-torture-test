@@ -13,6 +13,7 @@ USEMODULE += printf_float
 USEMODULE += saul_default
 USEMODULE += periph_adc
 USEMODULE += periph_cpuid
+USEMODULE += periph_hwrng
 USEMODULE += periph_i2c
 USEMODULE += periph_rtt
 USEMODULE += periph_rtc_mem

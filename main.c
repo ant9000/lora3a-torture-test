@@ -80,9 +80,9 @@ void send_to(uint8_t dst, char *buffer, size_t len)
     header.network = EMB_NETWORK;
     header.dst = dst;
     header.src = EMB_ADDRESS;
-    printf("Sending %d+%d bytes packet #%u to 0x%02X:\n", sizeof(header), len, emb_counter, dst);
+    printf("Sending %d+%d bytes packet #%u to 0x%02X:\n", EMB_HEADER_LEN, len, emb_counter, dst);
     printf("%s\n", buffer);
-    to_lora(&header, buffer, len);
+    protocol_out(&header, buffer, len);
     puts("Sent.");
 }
 
@@ -125,9 +125,11 @@ ssize_t packet_received(const embit_header_t *header, const void *buffer, size_t
     mutex_unlock(&sleep_lock);
 #else
 #ifdef BOARD_LORA3A_DONGLE
+/* TODO: we should not be sending from the receiving thread
     // send command
-    char command[] = "@20$"; // sleep for 20 seconds
+    char command[] = "@5$"; // sleep for 20 seconds
     send_to(header->src, command, strlen(command)+1);
+*/
 #endif
 #endif
     return 0;
@@ -220,11 +222,11 @@ int main(void)
     lora.coderate         = DEFAULT_LORA_CODERATE;
     lora.channel          = DEFAULT_LORA_CHANNEL;
     lora.power            = DEFAULT_LORA_POWER;
-    lora.data_cb          = *from_lora;
+    lora.data_cb          = *protocol_in;
 
     packet_consumer = *packet_received;
+    protocol_init();
     if (lora_init(&(lora)) != 0) { return 1; }
-
 
 #ifdef BOARD_LORA3A_SENSOR1
     if (RSTC->RCAUSE.reg == RSTC_RCAUSE_BACKUP) {
@@ -267,6 +269,9 @@ int main(void)
     char message[MAX_PAYLOAD_LEN];
     fmt_bytes_hex(cpuid, measures.cpuid, CPUID_LEN);
     cpuid[CPUID_LEN*2]='\0';
+/* TODO: what is the packet limit? */
+cpuid[0]='X';
+cpuid[1]=0;
     snprintf(
         message, MAX_PAYLOAD_LEN,
         "cpuid:%s,vcc:%ld,vpanel:%ld,temp:%.2f,hum:%.2f,txpower:%d,sleep:%lu",

@@ -1,4 +1,5 @@
 #include "thread.h"
+#include "mutex.h"
 #include "net/netdev/lora.h"
 
 #include "sx127x_internal.h"
@@ -18,8 +19,10 @@ static char lora_buffer[MAX_PACKET_LEN];
 static netdev_lora_rx_info_t lora_packet_info;
 
 static lora_data_cb_t *lora_data_cb;
-static void _lora_rx_cb(netdev_t *dev, netdev_event_t event);
+static void _lora_event_cb(netdev_t *dev, netdev_event_t event);
 void *_lora_recv_thread(void *arg);
+
+static mutex_t lora_transmission_lock = MUTEX_INIT;
 
 int lora_init(const lora_state_t *state)
 {
@@ -44,7 +47,7 @@ int lora_init(const lora_state_t *state)
     netdev->driver->set(netdev, NETOPT_CHANNEL_FREQUENCY, &lora_ch, sizeof(lora_ch));
     netdev->driver->set(netdev, NETOPT_TX_POWER, &lora_pw, sizeof(lora_pw));
 
-    netdev->event_callback = _lora_rx_cb;
+    netdev->event_callback = _lora_event_cb;
 
     lora_recv_pid = thread_create(stack, sizeof(stack), THREAD_PRIORITY_MAIN - 1,
                               THREAD_CREATE_STACKTEST, _lora_recv_thread, NULL,
@@ -65,12 +68,20 @@ int lora_write(const iolist_t *packet)
 {
     netdev_t *netdev = (netdev_t *)&sx127x;
     uint8_t len = iolist_size(packet);
-    // wait for radio to stop transmitting
+puts("lora_write: start");
+    mutex_lock(&lora_transmission_lock);
+puts("lora_write: lock acquired");
     while (netdev->driver->send(netdev, packet) == -ENOTSUP) { ztimer_sleep(ZTIMER_USEC, 10); }
-    // wait for end of transmission, adding a few usecs to time on air
-    uint32_t delay = sx127x_get_time_on_air(&sx127x, len);
-    ztimer_sleep(ZTIMER_USEC, delay * 1000 + 10);
-
+puts("lora_write: push data to radio");
+    // wait for end of transmission
+    uint32_t delay = sx127x_get_time_on_air(&sx127x, len) + 10;
+    if (ztimer_mutex_lock_timeout(ZTIMER_USEC, &lora_transmission_lock, delay * 1000) != 0) {
+        puts("TX TIMEOUT");
+    } else {
+        puts("TX OK");
+    }
+    mutex_unlock(&lora_transmission_lock);
+puts("lora_write: end");
     return len;
 }
 
@@ -95,7 +106,7 @@ void lora_set_power(uint8_t power)
     sx127x_set_tx_power(&sx127x, power);
 }
 
-static void _lora_rx_cb(netdev_t *dev, netdev_event_t event)
+static void _lora_event_cb(netdev_t *dev, netdev_event_t event)
 {
     if (event == NETDEV_EVENT_ISR) {
         msg_t msg;
@@ -109,6 +120,7 @@ static void _lora_rx_cb(netdev_t *dev, netdev_event_t event)
         switch (event) {
             case NETDEV_EVENT_RX_COMPLETE:
                 len = dev->driver->recv(dev, NULL, 0, 0);
+printf("NETDEV_EVENT_RX_COMPLETE: %d bytes\n", len);
                 if (len <= MAX_PACKET_LEN) {
                     dev->driver->recv(dev, lora_buffer, len, &lora_packet_info);
                     lora_data_cb(lora_buffer, len, &lora_packet_info.rssi, &lora_packet_info.snr);
@@ -117,9 +129,12 @@ static void _lora_rx_cb(netdev_t *dev, netdev_event_t event)
                 }
                 break;
             case NETDEV_EVENT_TX_COMPLETE:
+puts("NETDEV_EVENT_TX_COMPLETE");
+                mutex_unlock(&lora_transmission_lock);
                 lora_listen();
                 break;
             default:
+printf("NETDEV_EVENT #%d\n", event);
                 break;
         }
     }
