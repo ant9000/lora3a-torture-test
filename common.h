@@ -9,7 +9,7 @@
 #include "lora.h"
 #include "embit.h"
 
-#define MAX_PAYLOAD_LEN 110
+#define MAX_PAYLOAD_LEN 120
 #ifndef AES
 #define MAX_PACKET_LEN  (MAX_PAYLOAD_LEN + EMB_HEADER_LEN)
 #else
@@ -22,6 +22,6 @@
 #define DEFAULT_LORA_CHANNEL          SX127X_CHANNEL_DEFAULT
 #define DEFAULT_LORA_POWER            SX127X_RADIO_TX_POWER
 
-typedef ssize_t (consume_data_cb_t)(const embit_header_t *header, const void *buffer, size_t len, uint8_t *rssi, int8_t *snr);
+typedef ssize_t (consume_data_cb_t)(const embit_packet_t *packet);
 
 #endif /* COMMON_H */

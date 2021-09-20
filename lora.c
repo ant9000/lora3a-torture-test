@@ -12,6 +12,9 @@
 #define SX127X_STACKSIZE        (THREAD_STACKSIZE_DEFAULT)
 #define MSG_TYPE_ISR            (0x3456)
 
+#define ENABLE_DEBUG 0
+#include "debug.h"
+
 static char stack[SX127X_STACKSIZE];
 static kernel_pid_t lora_recv_pid;
 static sx127x_t sx127x;
@@ -68,20 +71,19 @@ int lora_write(const iolist_t *packet)
 {
     netdev_t *netdev = (netdev_t *)&sx127x;
     uint8_t len = iolist_size(packet);
-puts("lora_write: start");
     mutex_lock(&lora_transmission_lock);
-puts("lora_write: lock acquired");
-    while (netdev->driver->send(netdev, packet) == -ENOTSUP) { ztimer_sleep(ZTIMER_USEC, 10); }
-puts("lora_write: push data to radio");
-    // wait for end of transmission
-    uint32_t delay = sx127x_get_time_on_air(&sx127x, len) + 10;
-    if (ztimer_mutex_lock_timeout(ZTIMER_USEC, &lora_transmission_lock, delay * 1000) != 0) {
-        puts("TX TIMEOUT");
+    if (netdev->driver->send(netdev, packet) == -ENOTSUP) {
+        puts("TX FAILED");
+        len = -1;
     } else {
-        puts("TX OK");
+        // wait for end of transmission
+        uint32_t delay = sx127x_get_time_on_air(&sx127x, len);
+        if (ztimer_mutex_lock_timeout(ZTIMER_USEC, &lora_transmission_lock, delay * 1000 + 10) != 0) {
+            puts("TX TIMEOUT");
+            len = -1;
+        }
     }
     mutex_unlock(&lora_transmission_lock);
-puts("lora_write: end");
     return len;
 }
 
@@ -120,7 +122,7 @@ static void _lora_event_cb(netdev_t *dev, netdev_event_t event)
         switch (event) {
             case NETDEV_EVENT_RX_COMPLETE:
                 len = dev->driver->recv(dev, NULL, 0, 0);
-printf("NETDEV_EVENT_RX_COMPLETE: %d bytes\n", len);
+                DEBUG("NETDEV_EVENT_RX_COMPLETE: %d bytes\n", len);
                 if (len <= MAX_PACKET_LEN) {
                     dev->driver->recv(dev, lora_buffer, len, &lora_packet_info);
                     lora_data_cb(lora_buffer, len, &lora_packet_info.rssi, &lora_packet_info.snr);
@@ -129,12 +131,11 @@ printf("NETDEV_EVENT_RX_COMPLETE: %d bytes\n", len);
                 }
                 break;
             case NETDEV_EVENT_TX_COMPLETE:
-puts("NETDEV_EVENT_TX_COMPLETE");
+                DEBUG("NETDEV_EVENT_TX_COMPLETE");
                 mutex_unlock(&lora_transmission_lock);
-                lora_listen();
                 break;
             default:
-printf("NETDEV_EVENT #%d\n", event);
+                DEBUG("NETDEV_EVENT #%d\n", event);
                 break;
         }
     }

@@ -13,7 +13,10 @@ typedef struct {
 
 typedef struct {
     embit_header_t header;
-    char payload[];
+    char *payload;
+    size_t payload_len;
+    uint8_t rssi;
+    int8_t snr;
 } embit_packet_t;
 
 #define EMB_HEADER_LEN  sizeof(embit_header_t)

@@ -2,6 +2,8 @@
 #include <string.h>
 #include "od.h"
 #include "fmt.h"
+#include "msg.h"
+#include "thread.h"
 
 #ifdef BOARD_LORA3A_SENSOR1
 #include "mutex.h"
@@ -18,19 +20,13 @@
 #endif
 #endif
 
-#ifdef BOARD_LORA3A_DONGLE
-#include "thread.h"
-#endif
 
 #include "common.h"
 #include "protocol.h"
 
-consume_data_cb_t *packet_consumer;
-
 static lora_state_t lora;
 
 #ifdef BOARD_LORA3A_SENSOR1
-static mutex_t sleep_lock = MUTEX_INIT;
 #ifndef EMB_ADDRESS
 #define EMB_ADDRESS 1
 #endif
@@ -71,6 +67,9 @@ static uint16_t lost_messages[255];
 #endif
 
 static uint16_t emb_counter = 0;
+static embit_packet_t q_packet;
+static char q_payload[MAX_PACKET_LEN];
+static kernel_pid_t main_pid;
 
 void send_to(uint8_t dst, char *buffer, size_t len)
 {
@@ -86,52 +85,23 @@ void send_to(uint8_t dst, char *buffer, size_t len)
     puts("Sent.");
 }
 
-ssize_t packet_received(const embit_header_t *header, const void *buffer, size_t len, uint8_t *rssi, int8_t *snr)
+ssize_t packet_received(const embit_packet_t *packet)
 {
     // discard packets if not for us and not broadcast
-    if ((header->dst != EMB_ADDRESS) && (header->dst != EMB_BROADCAST)) { return 0; }
+    if ((packet->header.dst != EMB_ADDRESS) && (packet->header.dst != EMB_BROADCAST)) { return 0; }
 
     // dump message to stdout
     printf(
         "{\"CNT\":%u,\"NET\":%u,\"DST\":%u,\"SRC\":%u,\"RSSI\":%d,\"SNR\":%d,\"LEN\"=%d,\"DATA\"=\"%s\"}\n",
-        header->counter, header->network, header->dst, header->src, *rssi, *snr, len, (char *)buffer
+        packet->header.counter, packet->header.network, packet->header.dst, packet->header.src,
+        packet->rssi, packet->snr, packet->payload_len, packet->payload
     );
-
-#ifdef BOARD_LORA3A_DONGLE
-    num_messages[header->src]++;
-    if ((uint32_t)header->counter > (uint32_t)(last_message_no[header->src] + 1)) {
-        lost_messages[header->src] += header->counter - last_message_no[header->src] - 1;
-    }
-    last_message_no[header->src] = header->counter;
-#endif
-#ifdef BOARD_LORA3A_SENSOR1
-    // hold the mutex: don't enter sleep yet, we need to do some work
-    mutex_lock(&sleep_lock);
-    // parse command
-    char *ptr = (char *)buffer;
-    if((len > 2) && (strlen(ptr) == (size_t)(len-1)) && (ptr[0] == '@') && (ptr[len-2] == '$')) {
-        uint32_t seconds = strtoul(ptr+1, NULL, 0);
-        printf("Instructed to sleep for %lu seconds\n", seconds);
-        persist.sleep_seconds = (seconds > 0 ) && (seconds < 36000) ? (uint16_t)seconds : SLEEP_TIME_SEC;
-        if ((uint32_t)persist.sleep_seconds != seconds) {
-            printf("Corrected sleep value: %u seconds\n", persist.sleep_seconds);
-        }
-    } else {
-        persist.sleep_seconds = SLEEP_TIME_SEC;
-    }
-    persist.last_rssi = *rssi;
-    persist.last_snr = *snr;
-    // release the mutex
-    mutex_unlock(&sleep_lock);
-#else
-#ifdef BOARD_LORA3A_DONGLE
-/* TODO: we should not be sending from the receiving thread
-    // send command
-    char command[] = "@5$"; // sleep for 20 seconds
-    send_to(header->src, command, strlen(command)+1);
-*/
-#endif
-#endif
+    msg_t msg;
+    memcpy(q_payload, packet->payload, packet->payload_len);
+    memcpy(&q_packet, packet, sizeof(embit_packet_t));
+    q_packet.payload = q_payload;
+    msg.content.ptr = &q_packet;
+    msg_send(&msg, main_pid);
     return 0;
 }
 
@@ -176,6 +146,17 @@ void read_measures(void)
     measures.temp=0;
     measures.hum=0;
     read_hdc2021(&measures.temp, &measures.hum);
+}
+
+void parse_command(const char *ptr, size_t len) {
+    if((len > 2) && (strlen(ptr) == (size_t)(len-1)) && (ptr[0] == '@') && (ptr[len-2] == '$')) {
+        uint32_t seconds = strtoul(ptr+1, NULL, 0);
+        printf("Instructed to sleep for %lu seconds\n", seconds);
+        persist.sleep_seconds = (seconds > 0 ) && (seconds < 36000) ? (uint16_t)seconds : SLEEP_TIME_SEC;
+        if ((uint32_t)persist.sleep_seconds != seconds) {
+            printf("Corrected sleep value: %u seconds\n", persist.sleep_seconds);
+        }
+    }
 }
 
 void backup_mode(uint32_t seconds)
@@ -224,9 +205,12 @@ int main(void)
     lora.power            = DEFAULT_LORA_POWER;
     lora.data_cb          = *protocol_in;
 
-    packet_consumer = *packet_received;
-    protocol_init();
+    main_pid = thread_getpid();
+    protocol_init(*packet_received);
     if (lora_init(&(lora)) != 0) { return 1; }
+
+    msg_t msg;
+    embit_packet_t *packet;
 
 #ifdef BOARD_LORA3A_SENSOR1
     if (RSTC->RCAUSE.reg == RSTC_RCAUSE_BACKUP) {
@@ -269,9 +253,6 @@ int main(void)
     char message[MAX_PAYLOAD_LEN];
     fmt_bytes_hex(cpuid, measures.cpuid, CPUID_LEN);
     cpuid[CPUID_LEN*2]='\0';
-/* TODO: what is the packet limit? */
-cpuid[0]='X';
-cpuid[1]=0;
     snprintf(
         message, MAX_PAYLOAD_LEN,
         "cpuid:%s,vcc:%ld,vpanel:%ld,temp:%.2f,hum:%.2f,txpower:%d,sleep:%lu",
@@ -279,11 +260,19 @@ cpuid[1]=0;
         measures.hum, persist.tx_power, seconds
     );
     send_to(EMB_BROADCAST, message, strlen(message)+1);
-    // wait for commands
+    // wait for a command
     lora_listen();
-    ztimer_sleep(ZTIMER_MSEC, LISTEN_TIME_MSEC);
-    // hold the mutex: don't parse more packets now, because we're going to sleep
-    mutex_lock(&sleep_lock);
+    if (ztimer_msg_receive_timeout(ZTIMER_MSEC, &msg, LISTEN_TIME_MSEC) != -ETIME) {
+        // parse command
+        packet = (embit_packet_t *)msg.content.ptr;
+        persist.last_rssi = packet->rssi;
+        persist.last_snr = packet->snr;
+        char *ptr = packet->payload;
+        size_t len = packet->payload_len;
+        parse_command(ptr, len);
+    } else {
+        puts("No command received.");
+    }
     // save persistent values
     persist.message_counter = emb_counter;
     persist.tx_power = lora_get_power();
@@ -296,9 +285,27 @@ cpuid[1]=0;
     memset(last_message_no, 0, sizeof(last_message_no));
     memset(lost_messages, 0, sizeof(lost_messages));
     lora_listen();
+    ztimer_now_t last_stats_run = 0;
     for (;;) {
-        print_stats();
-        ztimer_sleep(ZTIMER_MSEC, 60000);
+        if (ztimer_msg_receive_timeout(ZTIMER_MSEC, &msg, 1000) != -ETIME) {
+            packet = (embit_packet_t *)msg.content.ptr;
+            embit_header_t *h = &packet->header;
+            num_messages[h->src]++;
+            if ((uint32_t)h->counter > (uint32_t)(last_message_no[h->src] + 1)) {
+                lost_messages[h->src] += h->counter - last_message_no[h->src] - 1;
+            }
+            last_message_no[h->src] = h->counter;
+            // send command
+            char command[] = "@20$"; // sleep for 20 seconds
+            send_to(h->src, command, strlen(command)+1);
+            lora_listen();
+        } else {
+            ztimer_now_t now = ztimer_now(ZTIMER_MSEC);
+            if (now >= last_stats_run + 60000) {
+                last_stats_run = now;
+                print_stats();
+            }
+        }
     }
 #endif
 #endif

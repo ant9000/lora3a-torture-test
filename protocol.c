@@ -16,10 +16,9 @@
 #endif
 #endif
 
-extern consume_data_cb_t *packet_consumer;
+static consume_data_cb_t *protocol_packet_consumer;
 
-static mutex_t lora_write_lock = MUTEX_INIT;
-static mutex_t lora_read_lock = MUTEX_INIT;
+static mutex_t lora_lock = MUTEX_INIT;
 
 #ifdef CONFIG_AES
 static struct aes_sync_device aes;
@@ -30,8 +29,9 @@ static uint8_t aes_key[16];
 #include "debug.h"
 #define HEXDUMP(msg, buffer, len) if (ENABLE_DEBUG) { puts(msg); od_hex_dump((char *)buffer, len, 0); }
 
-void protocol_init(void)
+void protocol_init(consume_data_cb_t *packet_consumer)
 {
+    protocol_packet_consumer = packet_consumer;
 #ifdef CONFIG_AES
     hwrng_init();
     aes_init();
@@ -43,40 +43,45 @@ void protocol_init(void)
 void protocol_in(const char *buffer, size_t len, uint8_t *rssi, int8_t *snr)
 {
     embit_header_t *header;
-    uint8_t *payload;
+    char *payload;
     size_t n;
-    mutex_lock(&lora_read_lock);
+    mutex_lock(&lora_lock);
     header = (embit_header_t *)buffer;
     HEXDUMP("RECEIVED PACKET:", buffer, len);
     if ((header->signature == EMB_SIGNATURE) && (len > EMB_HEADER_LEN)) {
-        payload = (uint8_t *)buffer + EMB_HEADER_LEN;
+        payload = (char *)buffer + EMB_HEADER_LEN;
         n = len - EMB_HEADER_LEN;
 #ifndef CONFIG_AES
-        packet_consumer(header, payload, n, rssi, snr);
+        embit_packet_t packet = { .header = *header, .payload = payload, .payload_len = n, .rssi = *rssi, .snr = *snr };
+        protocol_packet_consumer(&packet);
 #else
         if (n > 12 + 16) {
             uint8_t aes_output[MAX_PACKET_LEN];
             n -= 12 + 16;
             HEXDUMP("RECEIVED PAYLOAD:", payload, n);
-            uint8_t *nonce = payload + n;
+            uint8_t *nonce = (uint8_t *)payload + n;
             HEXDUMP("RECEIVED NONCE:", nonce, 12);
             uint8_t *tag = nonce + 12;
             HEXDUMP("RECEIVED TAG:", tag, 16);
             uint8_t verify[16];
-            aes_sync_gcm_crypt_and_tag(&aes, AES_DECRYPT, payload, aes_output, n, nonce, 12, (uint8_t *)header, EMB_HEADER_LEN, verify, 16);
+            aes_sync_gcm_crypt_and_tag(&aes, AES_DECRYPT, (uint8_t *)payload, aes_output, n, nonce, 12, (uint8_t *)header, EMB_HEADER_LEN, verify, 16);
             if (memcmp(tag, verify, 16) == 0) {
-                packet_consumer(header, aes_output, n, rssi, snr);
+                // remove padding
+                char c = aes_output[n-1];
+                if (c <= 16) { n -= c; }
+                embit_packet_t packet = { .header = *header, .payload = (char *)aes_output, .payload_len = n, .rssi = *rssi, .snr = *snr };
+                protocol_packet_consumer(&packet);
             }
         }
 #endif
     }
-    mutex_unlock(&lora_read_lock);
+    mutex_unlock(&lora_lock);
 }
 
 void protocol_out(const embit_header_t *header, const char *buffer, const size_t len)
 {
     iolist_t packet, payload;
-    mutex_lock(&lora_write_lock);
+    mutex_lock(&lora_lock);
     packet.iol_base = (void *)header;
     packet.iol_len = EMB_HEADER_LEN;
     packet.iol_next = &payload;
@@ -108,5 +113,5 @@ void protocol_out(const embit_header_t *header, const char *buffer, const size_t
 #endif
     payload.iol_next = NULL;
     lora_write(&packet);
-    mutex_unlock(&lora_write_lock);
+    mutex_unlock(&lora_lock);
 }
