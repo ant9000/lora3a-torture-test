@@ -207,12 +207,13 @@ int main(void)
 
     main_pid = thread_getpid();
     protocol_init(*packet_received);
-    if (lora_init(&(lora)) != 0) { return 1; }
 
     msg_t msg;
     embit_packet_t *packet;
 
 #ifdef BOARD_LORA3A_SENSOR1
+    lora_off();
+    read_measures();
     if (RSTC->RCAUSE.reg == RSTC_RCAUSE_BACKUP) {
         // read persistent values
         rtc_mem_read(0, (char *)&persist, sizeof(persist));
@@ -222,14 +223,12 @@ int main(void)
         }
         if (!empty) {
             emb_counter = persist.message_counter;
-            lora_set_power(persist.tx_power);
         }
     } else {
         memset(&persist, 0, sizeof(persist));
         persist.sleep_seconds = SLEEP_TIME_SEC;
         persist.tx_power = lora.power;
     }
-    read_measures();
     // adjust sleep interval according to available energy
     uint32_t seconds = persist.sleep_seconds;
     if (seconds) { printf("Sleep value from persistence: %lu seconds\n", seconds); }
@@ -259,19 +258,24 @@ int main(void)
         cpuid, measures.vcc, measures.vpanel, measures.temp,
         measures.hum, persist.tx_power, seconds
     );
-    send_to(EMB_BROADCAST, message, strlen(message)+1);
-    // wait for a command
-    lora_listen();
-    if (ztimer_msg_receive_timeout(ZTIMER_MSEC, &msg, LISTEN_TIME_MSEC) != -ETIME) {
-        // parse command
-        packet = (embit_packet_t *)msg.content.ptr;
-        persist.last_rssi = packet->rssi;
-        persist.last_snr = packet->snr;
-        char *ptr = packet->payload;
-        size_t len = packet->payload_len;
-        parse_command(ptr, len);
+    lora.power = persist.tx_power;
+    if (lora_init(&(lora)) == 0) {
+        send_to(EMB_BROADCAST, message, strlen(message)+1);
+        // wait for a command
+        lora_listen();
+        if (ztimer_msg_receive_timeout(ZTIMER_MSEC, &msg, LISTEN_TIME_MSEC) != -ETIME) {
+            // parse command
+            packet = (embit_packet_t *)msg.content.ptr;
+            persist.last_rssi = packet->rssi;
+            persist.last_snr = packet->snr;
+            char *ptr = packet->payload;
+            size_t len = packet->payload_len;
+            parse_command(ptr, len);
+        } else {
+            puts("No command received.");
+        }
     } else {
-        puts("No command received.");
+        puts("ERROR: cannot initialize radio.");
     }
     // save persistent values
     persist.message_counter = emb_counter;
@@ -284,6 +288,11 @@ int main(void)
     memset(num_messages, 0, sizeof(num_messages));
     memset(last_message_no, 0, sizeof(last_message_no));
     memset(lost_messages, 0, sizeof(lost_messages));
+    if (lora_init(&(lora)) != 0) {
+        puts("ERROR: cannot initialize radio.");
+        puts("STOP.");
+        return 1;
+    }
     lora_listen();
     ztimer_now_t last_stats_run = 0;
     for (;;) {
