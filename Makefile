@@ -29,6 +29,15 @@ endif
 ifeq ($(ROLE), gateway)
   BOARD ?= lora3a-dongle
   ADDRESS ?= 254
+  USEMODULE += stdio_cdc_acm
+  TERMDELAYDEPS := $(filter reset flash flash-only, $(MAKECMDGOALS))
+  ifneq (,$(TERMDELAYDEPS))
+    # By default, add 2 seconds delay before opening terminal: this is required
+    # when opening the terminal right after flashing. In this case, the stdio
+    # over USB needs some time after reset before being ready.
+    TERM_DELAY ?= 2
+    TERMDEPS += term-delay
+  endif
 endif
 
 ifneq (,$(ADDRESS))
@@ -41,5 +50,8 @@ ifeq (1,$(AES))
     CFLAGS += -DAES_KEY="\"$(AES_KEY)\""
   endif
 endif
+
+term-delay: $(TERMDELAYDEPS)
+	sleep $(TERM_DELAY)
 
 include $(RIOTBASE)/Makefile.include
