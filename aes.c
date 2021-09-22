@@ -13,12 +13,6 @@ static inline void __aes_sync_set_iv(uint8_t *iv);
 static inline void __aes_sync_get_indata(uint8_t *output, uint32_t words);
 static inline void __aes_sync_set_indata(const uint8_t *data, uint32_t words);
 
-int32_t aes_init(void)
-{
-    MCLK->APBCMASK.reg |= MCLK_APBCMASK_AES;
-    return 0;
-}
-
 int32_t aes_sync_set_encrypt_key(struct aes_sync_device *const dev, const uint8_t *key, const enum aes_keysize size)
 {
     assert(dev && key);
@@ -36,9 +30,11 @@ int32_t aes_sync_gcm_crypt_and_tag(struct aes_sync_device *const dev, const enum
     assert((input && output && length) || (!length));
     assert(((aad && aad_len) || !aad_len));
     assert((tag && tag_len && (tag_len <= 16)) || !tag_len);
+    MCLK->APBCMASK.reg |= MCLK_APBCMASK_AES;
     __aes_sync_gcm_start(dev, enc, iv, iv_len, aad, aad_len);
     __aes_sync_gcm_update(dev, input, output, length);
     __aes_sync_gcm_generate_tag(dev, tag, tag_len);
+    MCLK->APBCMASK.reg &= ~MCLK_APBCMASK_AES;
 
     return 0;
 }

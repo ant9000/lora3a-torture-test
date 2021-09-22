@@ -13,7 +13,6 @@ struct aes_sync_device {
     enum aes_keysize keysize; /*!< bit length of key */
 };
 
-int32_t aes_init(void);
 int32_t aes_sync_set_encrypt_key(struct aes_sync_device *const dev, const uint8_t *key, const enum aes_keysize size);
 int32_t aes_sync_gcm_crypt_and_tag(struct aes_sync_device *const dev, const enum aes_action enc,
                                    const uint8_t *input, uint8_t *output, uint32_t length, const uint8_t *iv,

@@ -34,7 +34,6 @@ void protocol_init(consume_data_cb_t *packet_consumer)
     protocol_packet_consumer = packet_consumer;
 #ifdef CONFIG_AES
     hwrng_init();
-    aes_init();
     fmt_hex_bytes(aes_key, AES_KEY);
     aes_sync_set_encrypt_key(&aes, aes_key, AES_KEY_128);
 #endif
