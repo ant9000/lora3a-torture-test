@@ -31,7 +31,7 @@ static lora_state_t lora;
 #define EMB_ADDRESS 1
 #endif
 #ifndef SLEEP_TIME_SEC
-#define SLEEP_TIME_SEC 5
+#define SLEEP_TIME_SEC 20
 #endif
 #ifndef LISTEN_TIME_MSEC
 #define LISTEN_TIME_MSEC 60
@@ -305,7 +305,7 @@ int main(void)
             }
             last_message_no[h->src] = h->counter;
             // send command
-            char command[] = "@20$"; // sleep for 20 seconds
+            char command[] = "@30$"; // sleep for 30 seconds
             send_to(h->src, command, strlen(command)+1);
             lora_listen();
         } else {
