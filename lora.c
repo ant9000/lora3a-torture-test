@@ -27,6 +27,8 @@ void *_lora_recv_thread(void *arg);
 
 static mutex_t lora_transmission_lock = MUTEX_INIT;
 
+static bool lora_init_done = false;
+
 int lora_init(const lora_state_t *state)
 {
     lora_data_cb = state->data_cb;
@@ -57,11 +59,17 @@ int lora_init(const lora_state_t *state)
                               "_lora_recv_thread");
 
     if (lora_recv_pid <= KERNEL_PID_UNDEF) return 1;
+    lora_init_done = true;
     return 0;
 }
 
 void lora_off(void)
 {
+    if (!lora_init_done) {
+        sx127x.params = sx127x_params[0];
+        spi_init(sx127x.params.spi);
+        sx127x_init(&sx127x);
+    }
     sx127x_set_sleep(&sx127x);
     spi_release(sx127x.params.spi);
     spi_deinit_pins(sx127x.params.spi);
