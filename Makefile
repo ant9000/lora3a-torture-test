@@ -20,6 +20,7 @@ USEMODULE += periph_i2c
 USEMODULE += periph_rtt
 USEMODULE += periph_rtc_mem
 USEMODULE += periph_spi_reconfigure
+USEMODULE += ztimer_usec
 
 ifeq ($(ROLE), node)
   BOARD ?= lora3a-sensor1
