@@ -24,7 +24,7 @@ int read_hdc(double *temp, double *hum)
         return 1;
     }
 
-    ztimer_sleep(ZTIMER_USEC, 2000);
+    ztimer_sleep(ZTIMER_USEC, 4000);
     if (i2c_write_bytes(I2C_DEV(0), HDC3020_ADDR, command, sizeof(command), 0)) {
         puts("ERROR: starting measure");
         return 1;
