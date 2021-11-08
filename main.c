@@ -14,7 +14,7 @@
 #include "periph/rtt.h"
 #include "periph/rtc_mem.h"
 
-#include "hdc2021.h"
+#include "hdc.h"
 #ifdef DEBUG_SAML21
 #include "debug_saml21.h"
 #endif
@@ -145,7 +145,7 @@ void read_measures(void)
     // read temp, hum
     measures.temp=0;
     measures.hum=0;
-    read_hdc2021(&measures.temp, &measures.hum);
+    read_hdc(&measures.temp, &measures.hum);
 }
 
 void parse_command(const char *ptr, size_t len) {

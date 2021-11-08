@@ -24,6 +24,7 @@ USEMODULE += ztimer_usec
 
 ifeq ($(ROLE), node)
   BOARD ?= lora3a-sensor1
+  VARIANT ?= BOARD_VARIANT_HARVEST8
   ADDRESS ?= 1
 endif
 
@@ -39,6 +40,10 @@ ifeq ($(ROLE), gateway)
     TERM_DELAY ?= 2
     TERMDEPS += term-delay
   endif
+endif
+
+ifneq (,$(VARIANT))
+  CFLAGS += -D$(VARIANT)
 endif
 
 ifneq (,$(ADDRESS))

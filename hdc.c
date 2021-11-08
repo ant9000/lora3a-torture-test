@@ -8,6 +8,45 @@
 
 #ifdef BOARD_LORA3A_SENSOR1
 
+#ifdef BOARD_VARIANT_HARVEST8
+
+#define HDC3020_ADDR             (0x44)
+#define HDC3020_MEAS_DELAY       (12000)
+
+int read_hdc(double *temp, double *hum)
+{
+    int status = 0, retry = 3;
+    uint8_t command[2] = {0x24, 0x00};
+    uint8_t data[6];
+
+    if (i2c_write_bytes(I2C_DEV(0), HDC3020_ADDR, command, sizeof(command), 0)) {
+        puts("ERROR: starting measure");
+        return 1;
+    }
+    ztimer_sleep(ZTIMER_USEC, HDC3020_MEAS_DELAY);
+    do {
+        status = i2c_read_bytes(I2C_DEV(0), HDC3020_ADDR, data, sizeof(data), 0);
+        if (status) {
+            retry--;
+            if (retry < 0) {
+              puts("ERROR: reading data");
+              return 1;
+            }
+            ztimer_sleep(ZTIMER_USEC, 50);
+        }
+    } while(status);
+
+    if (temp) {
+        *temp = ((data[0] << 8) + data[1]) * 175. / (1 << 16) - 45;
+    }
+    if (hum) {
+        *hum =  ((data[3] << 8) + data[4]) * 100. / (1 << 16);
+    }
+    return 0;
+}
+
+#else
+
 #define HDC2021_ADDR             (0x40)
 #define HDC2021_MEAS_CONF_REG    (0x0f)
 #define HDC2021_MEAS_TRIG        (1)
@@ -17,7 +56,7 @@
 #define HDC2021_TEMP_REG         (0x00)
 #define HDC2021_HUM_REG          (0x02)
 
-int read_hdc2021(double *temp, double *hum)
+int read_hdc(double *temp, double *hum)
 {
     uint8_t status = 0;
     uint8_t data[2];
@@ -49,12 +88,16 @@ int read_hdc2021(double *temp, double *hum)
     }
     return 0;
 }
+#endif /* BOARD_VARIANT_HARVEST8 */
+
 #else
-int read_hdc2021(double *temp, double *hum)
+
+int read_hdc(double *temp, double *hum)
 {
     (void)temp;
     (void)hum;
     puts("ERROR: sensor unavailable");
     return -1;
 }
-#endif
+
+#endif /* BOARD_LORA3A_SENSOR1 */
