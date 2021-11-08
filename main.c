@@ -34,7 +34,7 @@ static lora_state_t lora;
 #define SLEEP_TIME_SEC 20
 #endif
 #ifndef LISTEN_TIME_MSEC
-#define LISTEN_TIME_MSEC 60
+#define LISTEN_TIME_MSEC 110
 #endif
 static struct {
     uint16_t sleep_seconds;
