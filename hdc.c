@@ -32,7 +32,7 @@ int read_hdc(double *temp, double *hum)
               puts("ERROR: reading data");
               return 1;
             }
-            ztimer_sleep(ZTIMER_USEC, 50);
+            ztimer_sleep(ZTIMER_USEC, 100);
         }
     } while(status);
 
