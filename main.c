@@ -130,18 +130,21 @@ void print_stats(void)
 }
 #endif
 #ifdef BOARD_LORA3A_SENSOR1
+#define ADC_VCC    (0)
+#define ADC_VPANEL (1)
+#define VPANEL_ENABLE  GPIO_PIN(PA, 19)
 void read_measures(void)
 {
     // get cpuid
     cpuid_get(&measures.cpuid);
     // read vcc
-    measures.vcc = adc_sample(0, ADC_RES_12BIT);
+    measures.vcc = adc_sample(ADC_VCC, ADC_RES_12BIT);
     // read vpanel
-    gpio_init(GPIO_PIN(PA, 19), GPIO_OUT);
-    gpio_set(GPIO_PIN(PA, 19));
+    gpio_init(VPANEL_ENABLE, GPIO_OUT);
+    gpio_set(VPANEL_ENABLE);
     ztimer_sleep(ZTIMER_MSEC, 10);
-    measures.vpanel = adc_sample(1, ADC_RES_12BIT);
-    gpio_clear(GPIO_PIN(PA, 19));
+    measures.vpanel = adc_sample(ADC_VPANEL, ADC_RES_12BIT);
+    gpio_clear(VPANEL_ENABLE);
     // read temp, hum
     measures.temp=0;
     measures.hum=0;

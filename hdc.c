@@ -3,6 +3,7 @@
 
 #include "ztimer.h"
 #include "periph/i2c.h"
+#include "periph/gpio.h"
 
 #include "board.h"
 
@@ -10,14 +11,18 @@
 
 #ifdef BOARD_VARIANT_HARVEST8
 
+#define HDC_ENABLE               GPIO_PIN(PA, 18)
 #define HDC3020_ADDR             (0x44)
 #define HDC3020_MEAS_DELAY       (12000)
 
 int read_hdc(double *temp, double *hum)
 {
-    int status = 0, retry = 3;
+    int status = 0, retry = 10;
     uint8_t command[2] = {0x24, 0x00};
     uint8_t data[6];
+
+    gpio_init(HDC_ENABLE, GPIO_OUT);
+    gpio_set(HDC_ENABLE);
 
     if (i2c_acquire(I2C_DEV(0))) {
         puts("ERROR: acquiring bus for measure");
@@ -41,6 +46,8 @@ int read_hdc(double *temp, double *hum)
             ztimer_sleep(ZTIMER_USEC, 100);
         }
     } while(status);
+
+    gpio_clear(HDC_ENABLE);
 
     if (temp) {
         *temp = ((data[0] << 8) + data[1]) * 175. / (1 << 16) - 45;
