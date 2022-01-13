@@ -45,7 +45,7 @@ void protocol_in(const char *buffer, size_t len, uint8_t *rssi, int8_t *snr)
     char *payload;
     size_t n;
     mutex_lock(&lora_lock);
-    header = (embit_header_t *)buffer;
+    header = (embit_header_t *)(void const *)buffer;
     HEXDUMP("RECEIVED PACKET:", buffer, len);
     if ((header->signature == EMB_SIGNATURE) && (len > EMB_HEADER_LEN)) {
         payload = (char *)buffer + EMB_HEADER_LEN;

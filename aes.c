@@ -120,7 +120,7 @@ static void __aes_sync_gcm_start(struct aes_sync_device *const dev, const enum a
             ;
         /* Get j0 from GHASH reg */
         for (index = 0; index < 4; index++) {
-            ((uint32_t *)dev->iv)[index] = AES->GHASH[index].reg;
+            ((uint32_t *)(void *)dev->iv)[index] = AES->GHASH[index].reg;
             AES->GHASH[index].reg = 0x00;
         }
     }
@@ -288,7 +288,7 @@ static inline void __aes_sync_set_key(struct aes_sync_device *const dev)
     int i;
 
     for (i = 0; i < ((dev->keysize + 2) << 1); i++) {
-        AES->KEYWORD[i].reg = (((uint32_t *)(dev->key))[i]);
+        AES->KEYWORD[i].reg = (((uint32_t *)(void *)(dev->key))[i]);
     }
 }
 
@@ -302,7 +302,7 @@ static inline void __aes_sync_set_iv(uint8_t *iv)
                                    | ((uint8_t *)iv)[(i << 2) + 2] >> 16
                                    | ((uint8_t *)iv)[(i << 2) + 3] >> 24;
         } else {
-            AES->INTVECTV[i].reg =((uint32_t *)iv)[i];
+            AES->INTVECTV[i].reg =((uint32_t *)(void *)iv)[i];
         }
     }
 }
@@ -320,7 +320,7 @@ static inline void __aes_sync_get_indata(uint8_t *output, uint32_t words)
             *output++ = (buf >> 16) & 0xFF;
             *output++ = (buf >> 24) & 0xFF;
         } else {
-            ((uint32_t *)output)[i] = AES->INDATA.reg;
+            ((uint32_t *)(void *)output)[i] = AES->INDATA.reg;
         }
     }
 }
@@ -335,7 +335,7 @@ static inline void __aes_sync_set_indata(const uint8_t *data, uint32_t words)
                               | ((uint8_t *)data)[(i << 2) + 2] << 16
                               | ((uint8_t *)data)[(i << 2) + 3] << 24;
         } else {
-            AES->INDATA.reg = ((uint32_t *)data)[i];
+            AES->INDATA.reg = ((uint32_t *)(void const *)data)[i];
         }
     }
 }
