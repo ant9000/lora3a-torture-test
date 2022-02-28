@@ -39,7 +39,7 @@ void protocol_init(consume_data_cb_t *packet_consumer)
 #endif
 }
 
-void protocol_in(const char *buffer, size_t len, uint8_t *rssi, int8_t *snr)
+void protocol_in(const char *buffer, size_t len, int16_t *rssi, int8_t *snr)
 {
     embit_header_t *header;
     char *payload;
