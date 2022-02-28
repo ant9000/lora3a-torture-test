@@ -15,7 +15,7 @@ typedef struct {
     embit_header_t header;
     char *payload;
     size_t payload_len;
-    uint8_t rssi;
+    int16_t rssi;
     int8_t snr;
 } embit_packet_t;
 

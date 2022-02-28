@@ -39,7 +39,7 @@ static lora_state_t lora;
 static struct {
     uint16_t sleep_seconds;
     uint16_t message_counter;
-    uint8_t last_rssi;
+    int16_t last_rssi;
     int8_t last_snr;
     uint8_t tx_power;
 } persist;
