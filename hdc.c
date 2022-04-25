@@ -7,13 +7,21 @@
 
 #include "board.h"
 
-#ifdef BOARD_LORA3A_SENSOR1
+#if defined(BOARD_LORA3A_SENSOR1) || defined(BOARD_LORA3A_H10)
 
-#ifdef BOARD_VARIANT_HARVEST8
+#if defined(BOARD_VARIANT_HARVEST8) || defined(BOARD_LORA3A_H10)
 
+
+#if defined(BOARD_LORA3A_SENSOR1) && defined(BOARD_VARIANT_HARVEST8)
 #define HDC_ENABLE               GPIO_PIN(PA, 18)
+#endif
+#if defined(BOARD_LORA3A_H10)
+#define HDC_ENABLE               GPIO_PIN(PA, 27)
+#endif
+
+
 #define HDC3020_ADDR             (0x44)
-#define HDC3020_MEAS_DELAY       (12000)
+#define HDC3020_MEAS_DELAY       (22000)
 
 int read_hdc(double *temp, double *hum)
 {
@@ -24,7 +32,7 @@ int read_hdc(double *temp, double *hum)
     gpio_init(HDC_ENABLE, GPIO_OUT);
     gpio_set(HDC_ENABLE);
 
-    i2c_acquire(I2C_DEV(0));
+//    i2c_acquire(I2C_DEV(0));
 
     ztimer_sleep(ZTIMER_USEC, 4000);
     if (i2c_write_bytes(I2C_DEV(0), HDC3020_ADDR, command, sizeof(command), 0)) {

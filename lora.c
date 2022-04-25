@@ -13,6 +13,8 @@
 #define MSG_TYPE_ISR            (0x3456)
 
 #define ENABLE_DEBUG 0
+
+#define YESBOOST 1
 #include "debug.h"
 
 static char stack[SX127X_STACKSIZE];
@@ -36,6 +38,12 @@ int lora_init(const lora_state_t *state)
     sx127x.params = sx127x_params[0];
     netdev_t *netdev = (netdev_t *)&sx127x;
     netdev->driver = &sx127x_driver;
+#if defined(BOARD_SAMR34_XPRO) || defined (BOARD_LORA3A_H10)
+        gpio_init(TCXO_PWR_PIN, GPIO_OUT);
+        gpio_set(TCXO_PWR_PIN);
+        gpio_init(TX_OUTPUT_SEL_PIN, GPIO_OUT);
+        gpio_write(TX_OUTPUT_SEL_PIN, SX127X_PARAM_PASELECT);  // set TX_OUTPUT_SEL_PIN at "1" for Rx
+#endif
 
     spi_init(sx127x.params.spi);
     if (netdev->driver->init(netdev) < 0) return 1;
@@ -73,6 +81,10 @@ void lora_off(void)
     sx127x_set_sleep(&sx127x);
     spi_release(sx127x.params.spi);
     spi_deinit_pins(sx127x.params.spi);
+#if defined(BOARD_SAMR34_XPRO) || defined (BOARD_LORA3A_H10)
+        gpio_clear(TCXO_PWR_PIN);
+        gpio_clear(TX_OUTPUT_SEL_PIN);
+#endif
 }
 
 int lora_write(const iolist_t *packet)
@@ -80,6 +92,13 @@ int lora_write(const iolist_t *packet)
     netdev_t *netdev = (netdev_t *)&sx127x;
     uint8_t len = iolist_size(packet);
     mutex_lock(&lora_transmission_lock);
+#if defined(BOARD_SAMR34_XPRO) || defined (BOARD_LORA3A_H10)
+#if YESBOOST
+	gpio_clear(TX_OUTPUT_SEL_PIN);   // V1 = 0
+#else
+	gpio_set(TX_OUTPUT_SEL_PIN);  // V1 = 1
+#endif
+#endif    
     if (netdev->driver->send(netdev, packet) == -ENOTSUP) {
         puts("TX FAILED");
         len = -1;
@@ -91,6 +110,9 @@ int lora_write(const iolist_t *packet)
             len = -1;
         }
     }
+#if defined(BOARD_SAMR34_XPRO) || defined (BOARD_LORA3A_H10)
+	gpio_set(TX_OUTPUT_SEL_PIN);  // V1 = 1  for Rx
+#endif
     mutex_unlock(&lora_transmission_lock);
     return len;
 }

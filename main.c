@@ -5,7 +5,7 @@
 #include "msg.h"
 #include "thread.h"
 
-#ifdef BOARD_LORA3A_SENSOR1
+#if defined(BOARD_LORA3A_SENSOR1) || defined(BOARD_LORA3A_H10)
 #include "mutex.h"
 #include "periph/adc.h"
 #include "periph/cpuid.h"
@@ -24,14 +24,18 @@
 #include "common.h"
 #include "protocol.h"
 
+#include "board.h"
+// you need to define H10RX in order to use H10 board as gateway instead of a dongle
+//#define H10RX 1
+
 static lora_state_t lora;
 
-#ifdef BOARD_LORA3A_SENSOR1
+#if defined(BOARD_LORA3A_SENSOR1) || defined(BOARD_LORA3A_H10)
 #ifndef EMB_ADDRESS
 #define EMB_ADDRESS 1
 #endif
 #ifndef SLEEP_TIME_SEC
-#define SLEEP_TIME_SEC 20
+#define SLEEP_TIME_SEC 5
 #endif
 #ifndef LISTEN_TIME_MSEC
 #define LISTEN_TIME_MSEC 110
@@ -53,7 +57,8 @@ static struct {
 } measures;
 #endif
 
-#ifdef BOARD_LORA3A_DONGLE
+
+#if defined(BOARD_LORA3A_DONGLE) || defined(H10RX)
 #ifndef EMB_ADDRESS
 #define EMB_ADDRESS 254
 #endif
@@ -105,7 +110,8 @@ ssize_t packet_received(const embit_packet_t *packet)
     return 0;
 }
 
-#ifdef BOARD_LORA3A_DONGLE
+
+#if defined(BOARD_LORA3A_DONGLE) || defined(H10RX)
 void print_stats(void)
 {
     uint8_t nodes=0;
@@ -129,10 +135,18 @@ void print_stats(void)
     puts("# --------------------------------------");
 }
 #endif
-#ifdef BOARD_LORA3A_SENSOR1
+#if defined(BOARD_LORA3A_SENSOR1)
+#define VPANEL_ENABLE  GPIO_PIN(PA, 19)
+#endif
+#if defined(BOARD_LORA3A_H10)
+#define VPANEL_ENABLE  GPIO_PIN(PA, 27)
+#endif
+
+
+#if defined(BOARD_LORA3A_SENSOR1) || defined(BOARD_LORA3A_H10)
 #define ADC_VCC    (0)
 #define ADC_VPANEL (1)
-#define VPANEL_ENABLE  GPIO_PIN(PA, 19)
+
 void read_measures(void)
 {
     // get cpuid
@@ -145,9 +159,8 @@ void read_measures(void)
     ztimer_sleep(ZTIMER_MSEC, 10);
     measures.vpanel = adc_sample(ADC_VPANEL, ADC_RES_12BIT);
     gpio_clear(VPANEL_ENABLE);
+    
     // read temp, hum
-    measures.temp=0;
-    measures.hum=0;
     read_hdc(&measures.temp, &measures.hum);
 }
 
@@ -194,6 +207,11 @@ void backup_mode(uint32_t seconds)
         gpio_init(uart_config[i].rx_pin, GPIO_IN_PU);
         gpio_init(uart_config[i].tx_pin, GPIO_IN_PU);
     }
+#if defined(BOARD_SAMR34_XPRO) || defined (BOARD_LORA3A_H10)
+    gpio_init(TCXO_PWR_PIN, GPIO_IN_PD);
+    gpio_init(TX_OUTPUT_SEL_PIN, GPIO_IN_PD);
+#endif
+
     pm_set(0);
 }
 #endif
@@ -214,7 +232,10 @@ int main(void)
     msg_t msg;
     embit_packet_t *packet;
 
-#ifdef BOARD_LORA3A_SENSOR1
+
+#if defined(BOARD_LORA3A_SENSOR1) || defined(BOARD_LORA3A_H10) && !defined(H10RX)
+
+puts("Sensor set.");
     lora_off();
     read_measures();
     if (RSTC->RCAUSE.reg == RSTC_RCAUSE_BACKUP) {
@@ -286,8 +307,12 @@ int main(void)
     rtc_mem_write(0, (char *)&persist, sizeof(persist));
     // enter deep sleep
     backup_mode(seconds);
-#else
-#ifdef BOARD_LORA3A_DONGLE
+#endif    
+//#else
+
+#if defined(BOARD_LORA3A_DONGLE) || defined(BOARD_LORA3A_H10) && defined(H10RX)
+puts("Gateway set.");
+
     memset(num_messages, 0, sizeof(num_messages));
     memset(last_message_no, 0, sizeof(last_message_no));
     memset(lost_messages, 0, sizeof(lost_messages));
@@ -319,7 +344,8 @@ int main(void)
             }
         }
     }
-#endif
+//#endif    
+//#endif
 #endif
     return 0;
 }
