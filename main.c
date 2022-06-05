@@ -152,12 +152,12 @@ void read_measures(void)
     // get cpuid
     cpuid_get(&measures.cpuid);
     // read vcc
-    measures.vcc = adc_sample(ADC_VCC, ADC_RES_12BIT);
+    measures.vcc = adc_sample(ADC_VCC, ADC_RES_12BIT)*4000/4095;  // corrected value (1V = 4095 counts)
     // read vpanel
     gpio_init(VPANEL_ENABLE, GPIO_OUT);
     gpio_set(VPANEL_ENABLE);
-    ztimer_sleep(ZTIMER_MSEC, 10);
-    measures.vpanel = adc_sample(ADC_VPANEL, ADC_RES_12BIT);
+    ztimer_sleep(ZTIMER_MSEC, 30);
+    measures.vpanel = adc_sample(ADC_VPANEL, ADC_RES_12BIT)*3933/4095; // adapted to real resistor partition value (75k over 220k)
     gpio_clear(VPANEL_ENABLE);
     
     // read temp, hum
@@ -177,9 +177,14 @@ void parse_command(const char *ptr, size_t len) {
 
 void backup_mode(uint32_t seconds)
 {
+#if defined(BOARD_LORA3A_H10)
+    uint8_t extwake = 7;
+    // PA07 aka BTN0 can wake up the board
+#else
     uint8_t extwake = 6;
-    gpio_init(GPIO_PIN(PA, extwake), GPIO_IN_PU);
     // PA06 aka BTN0 can wake up the board
+#endif    
+    gpio_init(GPIO_PIN(PA, extwake), GPIO_IN_PU);
     RSTC->WKEN.reg = 1 << extwake;
     RSTC->WKPOL.reg &= ~(1 << extwake);
     // schedule a wakeup alarm
