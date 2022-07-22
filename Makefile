@@ -31,14 +31,16 @@ endif
 ifeq ($(ROLE), gateway)
   BOARD ?= lora3a-dongle
   ADDRESS ?= 254
-  USEMODULE += stdio_cdc_acm
-  TERMDELAYDEPS := $(filter reset flash flash-only, $(MAKECMDGOALS))
-  ifneq (,$(TERMDELAYDEPS))
-    # By default, add 2 seconds delay before opening terminal: this is required
-    # when opening the terminal right after flashing. In this case, the stdio
-    # over USB needs some time after reset before being ready.
-    TERM_DELAY ?= 2
-    TERMDEPS += term-delay
+  ifeq ($(BOARD), lora3a-dongle)
+    USEMODULE += stdio_cdc_acm    
+    TERMDELAYDEPS := $(filter reset flash flash-only, $(MAKECMDGOALS))
+    ifneq (,$(TERMDELAYDEPS))
+      # By default, add 2 seconds delay before opening terminal: this is required
+      # when opening the terminal right after flashing. In this case, the stdio
+      # over USB needs some time after reset before being ready.
+      TERM_DELAY ?= 2
+      TERMDEPS += term-delay
+    endif
   endif
 endif
 
