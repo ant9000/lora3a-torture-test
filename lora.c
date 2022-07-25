@@ -14,7 +14,6 @@
 
 #define ENABLE_DEBUG 0
 
-#define YESBOOST 1
 #include "debug.h"
 
 static char stack[SX127X_STACKSIZE];
@@ -31,8 +30,11 @@ static mutex_t lora_transmission_lock = MUTEX_INIT;
 
 static bool lora_init_done = false;
 
+static const lora_state_t *lora;
+
 int lora_init(const lora_state_t *state)
 {
+	lora = state;
     lora_data_cb = state->data_cb;
 
     sx127x.params = sx127x_params[0];
@@ -93,11 +95,13 @@ int lora_write(const iolist_t *packet)
     uint8_t len = iolist_size(packet);
     mutex_lock(&lora_transmission_lock);
 #if defined(BOARD_SAMR34_XPRO) || defined (BOARD_LORA3A_H10)
-#if YESBOOST
-	gpio_clear(TX_OUTPUT_SEL_PIN);   // V1 = 0
-#else
-	gpio_set(TX_OUTPUT_SEL_PIN);  // V1 = 1
-#endif
+	printf("boost=%d txpower=%d\n",lora->boost, lora->power);
+// put here the output select pin selection based on persist value
+	if (lora->boost) {
+		gpio_clear(TX_OUTPUT_SEL_PIN);   // V1 = 0
+	} else {
+		gpio_set(TX_OUTPUT_SEL_PIN);  // V1 = 1
+    }
 #endif    
     if (netdev->driver->send(netdev, packet) == -ENOTSUP) {
         puts("TX FAILED");

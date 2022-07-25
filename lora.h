@@ -11,6 +11,7 @@ typedef struct {
     uint8_t coderate;
     uint32_t channel;
     int16_t power;
+    uint8_t boost;
     lora_data_cb_t *data_cb;
 } lora_state_t;
 

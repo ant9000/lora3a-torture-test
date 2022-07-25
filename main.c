@@ -46,6 +46,7 @@ static struct {
     int16_t last_rssi;
     int8_t last_snr;
     uint8_t tx_power;
+    uint8_t boost;
 } persist;
 
 static struct {
@@ -164,22 +165,41 @@ void read_measures(void)
     read_hdc(&measures.temp, &measures.hum);
 }
 
-void parse_command(const char *ptr, size_t len) {
+void parse_command(char *ptr, size_t len) {
+	char *token;
+	int8_t txpow=0; 
     if((len > 2) && (strlen(ptr) == (size_t)(len-1)) && (ptr[0] == '@') && (ptr[len-2] == '$')) {
-        uint32_t seconds = strtoul(ptr+1, NULL, 0);
+		token = strtok(ptr+1, ",");
+        uint32_t seconds = strtoul(token, NULL, 0);
         printf("Instructed to sleep for %lu seconds\n", seconds);
+        
         persist.sleep_seconds = (seconds > 0 ) && (seconds < 36000) ? (uint16_t)seconds : SLEEP_TIME_SEC;
         if ((uint32_t)persist.sleep_seconds != seconds) {
             printf("Corrected sleep value: %u seconds\n", persist.sleep_seconds);
         }
+        token = strtok(NULL, ",");
+        if (token[0]=='B') {
+			printf("Boost out selected!\n");
+			lora.boost = 1;
+		} else {
+			printf("RFO out selected!\n");
+			lora.boost = 0;
+		}		
+        token = strtok(NULL, "$");
+        txpow = atoi(token);
+        if (txpow!=0) {
+			lora.power = txpow;
+			printf("Instructed to tx at level %d\n",txpow);
+		}	
+        // to be added a complete error recovery/received commands validation for transmission errors
     }
 }
 
 void backup_mode(uint32_t seconds)
 {
 #if defined(BOARD_LORA3A_H10)
-    uint8_t extwake = 7;
-    // PA07 aka BTN0 can wake up the board
+    uint8_t extwake = 6; // on H10-EVAL it is PA06 
+    // PA06 aka BTN0 can wake up the board
 #else
     uint8_t extwake = 6;
     // PA06 aka BTN0 can wake up the board
@@ -253,6 +273,8 @@ puts("Sensor set.");
         if (!empty) {
             emb_counter = persist.message_counter;
         }
+        lora.boost = persist.boost;  // ROB to recover boost from persist
+        printf("Boost value from persistence: %d\n", lora.boost);
     } else {
         memset(&persist, 0, sizeof(persist));
         persist.sleep_seconds = SLEEP_TIME_SEC;
@@ -281,11 +303,12 @@ puts("Sensor set.");
     char message[MAX_PAYLOAD_LEN];
     fmt_bytes_hex(cpuid, measures.cpuid, CPUID_LEN);
     cpuid[CPUID_LEN*2]='\0';
+    
     snprintf(
         message, MAX_PAYLOAD_LEN,
-        "cpuid:%s,vcc:%ld,vpanel:%ld,temp:%.2f,hum:%.2f,txpower:%d,sleep:%lu",
+        "id:%s,vcc:%ld,vpan:%ld,temp:%.2f,hum:%.2f,txp:%c:%d,rxdb:%d,rxsnr:%d,sleep:%lu",
         cpuid, measures.vcc, measures.vpanel, measures.temp,
-        measures.hum, persist.tx_power, seconds
+        measures.hum, persist.boost?'B':'R', persist.tx_power, persist.last_rssi, persist.last_snr, seconds
     );
     lora.power = persist.tx_power;
     if (lora_init(&(lora)) == 0) {
@@ -297,6 +320,7 @@ puts("Sensor set.");
             packet = (embit_packet_t *)msg.content.ptr;
             persist.last_rssi = packet->rssi;
             persist.last_snr = packet->snr;
+            printf("rx rssi %d, rx snr %d\n",packet->rssi, packet->snr);
             char *ptr = packet->payload;
             size_t len = packet->payload_len;
             parse_command(ptr, len);
@@ -308,8 +332,10 @@ puts("Sensor set.");
     }
     // save persistent values
     persist.message_counter = emb_counter;
-    persist.tx_power = lora_get_power();
-    rtc_mem_write(0, (char *)&persist, sizeof(persist));
+//    persist.tx_power = lora_get_power();
+    persist.tx_power = lora.power;  // lora_get_power is not used for transmission
+    persist.boost = lora.boost;
+     rtc_mem_write(0, (char *)&persist, sizeof(persist));
     // enter deep sleep
     backup_mode(seconds);
 #endif    
@@ -327,6 +353,7 @@ puts("Gateway set.");
         return 1;
     }
     lora_listen();
+    lora.boost=1;
     ztimer_now_t last_stats_run = 0;
     for (;;) {
         if (ztimer_msg_receive_timeout(ZTIMER_MSEC, &msg, 1000) != -ETIME) {
@@ -338,7 +365,7 @@ puts("Gateway set.");
             }
             last_message_no[h->src] = h->counter;
             // send command
-            char command[] = "@30$"; // sleep for 30 seconds
+            char command[] = "@5,B,14$"; // sleep for 30 seconds, use RFO and txpower at 10
             send_to(h->src, command, strlen(command)+1);
             lora_listen();
         } else {
