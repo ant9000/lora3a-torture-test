@@ -197,13 +197,8 @@ void parse_command(char *ptr, size_t len) {
 
 void backup_mode(uint32_t seconds)
 {
-#if defined(BOARD_LORA3A_H10)
-    uint8_t extwake = 6; // on H10-EVAL it is PA06 
-    // PA06 aka BTN0 can wake up the board
-#else
     uint8_t extwake = 6;
     // PA06 aka BTN0 can wake up the board
-#endif    
     gpio_init(GPIO_PIN(PA, extwake), GPIO_IN_PU);
     RSTC->WKEN.reg = 1 << extwake;
     RSTC->WKPOL.reg &= ~(1 << extwake);
