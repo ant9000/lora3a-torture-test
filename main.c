@@ -15,6 +15,7 @@
 #include "periph/rtc_mem.h"
 
 #include "hdc.h"
+
 #ifdef DEBUG_SAML21
 #include "debug_saml21.h"
 #endif
@@ -213,24 +214,39 @@ void backup_mode(uint32_t seconds)
     debug_saml21();
 #endif
     // turn off PORT pins
-    size_t num = sizeof(PORT->Group)/sizeof(PortGroup);
-    size_t num1 = sizeof(PORT->Group[0].PINCFG)/sizeof(PORT_PINCFG_Type);
-    for (size_t i=0; i<num; i++) {
-        for (size_t j=0; j<num1; j++) {
-            if (i != 0 || j != extwake) {
-                PORT->Group[i].PINCFG[j].reg = 0;
-            }
-        }
-    }
+//    size_t num = sizeof(PORT->Group)/sizeof(PortGroup);
+//    size_t num1 = sizeof(PORT->Group[0].PINCFG)/sizeof(PORT_PINCFG_Type);
+//    for (size_t i=0; i<num; i++) {
+//        for (size_t j=0; j<num1; j++) {
+//            if (i != 0 || j != extwake) {
+//                PORT->Group[i].PINCFG[j].reg = 0;
+//            }
+//        }
+//    }
     // add pullups to console pins
-    for (size_t i=0; i<UART_NUMOF; i++) {
-        gpio_init(uart_config[i].rx_pin, GPIO_IN_PU);
-        gpio_init(uart_config[i].tx_pin, GPIO_IN_PU);
-    }
-#if defined(BOARD_SAMR34_XPRO) || defined (BOARD_LORA3A_H10)
-    gpio_init(TCXO_PWR_PIN, GPIO_IN_PD);
-    gpio_init(TX_OUTPUT_SEL_PIN, GPIO_IN_PD);
-#endif
+//    for (size_t i=0; i<UART_NUMOF; i++) {
+//        gpio_init(uart_config[i].rx_pin, GPIO_IN_PU);
+//        gpio_init(uart_config[i].tx_pin, GPIO_IN_PU);
+//    }
+//#if defined(BOARD_SAMR34_XPRO) || defined (BOARD_LORA3A_H10)
+//    gpio_init(TCXO_PWR_PIN, GPIO_IN_PD);
+//    gpio_init(TX_OUTPUT_SEL_PIN, GPIO_IN_PD);
+//#endif
+    gpio_init(GPIO_PIN(PA, 9), GPIO_OUT);
+    gpio_clear(GPIO_PIN(PA, 9));
+    gpio_init(GPIO_PIN(PA, 13), GPIO_OUT);
+    gpio_clear(GPIO_PIN(PA, 13));
+
+    gpio_init(GPIO_PIN(PA, 4), GPIO_IN_PU);
+    gpio_init(GPIO_PIN(PA, 5), GPIO_IN_PU);
+    gpio_init(GPIO_PIN(PA, 6), GPIO_IN_PU);
+    gpio_init(GPIO_PIN(PA, 7), GPIO_IN_PU);
+    gpio_init(GPIO_PIN(PA, 8), GPIO_IN_PD);
+
+    gpio_init(GPIO_PIN(PB, 2), GPIO_IN_PU);
+    gpio_init(GPIO_PIN(PB, 3), GPIO_IN_PU);
+    gpio_init(GPIO_PIN(PB, 22), GPIO_IN_PU);
+    gpio_init(GPIO_PIN(PB, 23), GPIO_IN_PU);
 
     pm_set(0);
 }
