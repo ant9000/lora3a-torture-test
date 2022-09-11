@@ -15,6 +15,7 @@
 #include "periph/rtc_mem.h"
 
 #include "hdc.h"
+#include "shell.h"
 
 #ifdef DEBUG_SAML21
 #include "debug_saml21.h"
@@ -26,8 +27,6 @@
 #include "protocol.h"
 
 #include "board.h"
-// you need to define H10RX in order to use H10 board as gateway instead of a dongle
-//#define H10RX 1
 
 static lora_state_t lora;
 
@@ -232,21 +231,22 @@ void backup_mode(uint32_t seconds)
 //    gpio_init(TCXO_PWR_PIN, GPIO_IN_PD);
 //    gpio_init(TX_OUTPUT_SEL_PIN, GPIO_IN_PD);
 //#endif
-    gpio_init(GPIO_PIN(PA, 9), GPIO_OUT);
-    gpio_clear(GPIO_PIN(PA, 9));
-    gpio_init(GPIO_PIN(PA, 13), GPIO_OUT);
-    gpio_clear(GPIO_PIN(PA, 13));
+// Rob switch off pins, not necessary anymore
+//    gpio_init(GPIO_PIN(PA, 9), GPIO_OUT);
+//    gpio_clear(GPIO_PIN(PA, 9));
+//    gpio_init(GPIO_PIN(PA, 13), GPIO_OUT);
+//    gpio_clear(GPIO_PIN(PA, 13));
 
-    gpio_init(GPIO_PIN(PA, 4), GPIO_IN_PU);
-    gpio_init(GPIO_PIN(PA, 5), GPIO_IN_PU);
-    gpio_init(GPIO_PIN(PA, 6), GPIO_IN_PU);
-    gpio_init(GPIO_PIN(PA, 7), GPIO_IN_PU);
-    gpio_init(GPIO_PIN(PA, 8), GPIO_IN_PD);
+//    gpio_init(GPIO_PIN(PA, 4), GPIO_IN_PU);
+//    gpio_init(GPIO_PIN(PA, 5), GPIO_IN_PU);
+//    gpio_init(GPIO_PIN(PA, 6), GPIO_IN_PU);
+//    gpio_init(GPIO_PIN(PA, 7), GPIO_IN_PU);
+//    gpio_init(GPIO_PIN(PA, 8), GPIO_IN_PD);
 
-    gpio_init(GPIO_PIN(PB, 2), GPIO_IN_PU);
-    gpio_init(GPIO_PIN(PB, 3), GPIO_IN_PU);
-    gpio_init(GPIO_PIN(PB, 22), GPIO_IN_PU);
-    gpio_init(GPIO_PIN(PB, 23), GPIO_IN_PU);
+//    gpio_init(GPIO_PIN(PB, 2), GPIO_IN_PU);
+//    gpio_init(GPIO_PIN(PB, 3), GPIO_IN_PU);
+//    gpio_init(GPIO_PIN(PB, 22), GPIO_IN_PU);
+//    gpio_init(GPIO_PIN(PB, 23), GPIO_IN_PU);
 
     pm_set(0);
 }
@@ -267,6 +267,8 @@ int main(void)
 
     msg_t msg;
     embit_packet_t *packet;
+	puts("\n\n\n");
+	printf("LORA3A-TORTURE-TEST Compiled: %s,%s\n", __DATE__, __TIME__);
 
 
 #if defined(BOARD_LORA3A_SENSOR1) || defined(BOARD_LORA3A_H10) && !defined(H10RX)
@@ -354,7 +356,18 @@ puts("Sensor set.");
 
 #if defined(BOARD_LORA3A_DONGLE) || defined(BOARD_LORA3A_H10) && defined(H10RX)
 puts("Gateway set.");
-
+    char str41[]="@300,B,1$"; 
+    char str42[]="@300,B,1$"; 
+    char str43[]="@720,R,14$"; 
+    char str44[]="@300,B,1$"; 
+    char str45[]="@300,B,1$"; 
+    char str46[]="@300,B,1$"; 
+    char str47[]="@300,B,1$"; 
+    char str49[]="@10,B,1$"; 
+    char str50[]="@60,B,1$"; 
+    char str62[]="@300,B,1$"; 
+    char str100[]="@720,R,14$"; 
+    char strdefault[]="@300,B,1$"; 
     memset(num_messages, 0, sizeof(num_messages));
     memset(last_message_no, 0, sizeof(last_message_no));
     memset(lost_messages, 0, sizeof(lost_messages));
@@ -376,8 +389,45 @@ puts("Gateway set.");
             }
             last_message_no[h->src] = h->counter;
             // send command
-            char command[] = "@5,B,14$"; // sleep for 30 seconds, use RFO and txpower at 10
-            send_to(h->src, command, strlen(command)+1);
+            switch (h->src) {
+					case 41:
+						send_to(h->src, str41, strlen(str41)+1);
+						break;
+					case 42:
+						send_to(h->src, str42, strlen(str42)+1);
+						break;
+					case 43:
+						send_to(h->src, str43, strlen(str43)+1);
+						break;
+					case 44:
+						send_to(h->src, str44, strlen(str44)+1);
+						break;
+					case 45:
+						send_to(h->src, str45, strlen(str45)+1);
+						break;
+					case 46:
+						send_to(h->src, str46, strlen(str46)+1);
+						break;
+					case 47:
+						send_to(h->src, str47, strlen(str47)+1);
+						break;
+					case 49:
+						send_to(h->src, str49, strlen(str49)+1);
+						break;
+					case 50:
+						send_to(h->src, str50, strlen(str50)+1);
+						break;
+					case 62:
+						send_to(h->src, str62, strlen(str62)+1);
+						break;
+					case 100:
+						send_to(h->src, str100, strlen(str100)+1);
+						break;
+					default:
+						send_to(h->src, strdefault, strlen(strdefault)+1);
+						break;	
+			}	
+            
             lora_listen();
         } else {
             ztimer_now_t now = ztimer_now(ZTIMER_MSEC);

@@ -3,6 +3,9 @@ RIOTBASE ?= $(CURDIR)/../RIOT
 EXTERNAL_BOARD_DIRS ?= $(CURDIR)/../lora3a-boards/boards
 QUIET ?= 1
 DEVELHELP ?= 1
+BME688_ACME1 ?= 0
+BME688_ACME2 ?= 0
+H10RX ?= 0
 
 ROLE ?= node
 AES ?= 1
@@ -21,6 +24,29 @@ USEMODULE += periph_rtt
 USEMODULE += periph_rtc_mem
 USEMODULE += periph_spi_reconfigure
 USEMODULE += ztimer_usec
+
+ifeq ($(H10RX), 1)
+  CFLAGS += -DH10RX
+endif
+
+ifeq ($(BOARD),lora3a-h10)
+	ifeq ($(BME688_ACME1), 1)
+	  USEMODULE += bme680_fp bme680_i2c
+	  USEMODULE += periph_i2c_reconfigure
+	  CFLAGS += -DBME688_ACME1=1 -DBME680_PARAM_I2C_DEV=1 -DBME680_PARAM_I2C_ADDR=0x76
+	# # TODO:
+	# # - bus is off at boot, we should not call drivers/saul/init_devs/auto_init_bme680.c
+	# # - 11/9/22 now power acme sensor 1 is on at boot only if requested
+	endif
+	ifeq ($(BME688_ACME2), 1)
+	  USEMODULE += bme680_fp bme680_i2c
+	  USEMODULE += periph_i2c_reconfigure
+	  CFLAGS += -DBME688_ACME2=1 -DBME680_PARAM_I2C_DEV=2 -DBME680_PARAM_I2C_ADDR=0x76
+	# # TODO:
+	# # - bus is off at boot, we should not call drivers/saul/init_devs/auto_init_bme680.c
+	# # - 11/9/22 now power acme sensor 2 is on at boot only if requested
+	endif
+endif
 
 ifeq ($(ROLE), node)
   BOARD ?= lora3a-sensor1
