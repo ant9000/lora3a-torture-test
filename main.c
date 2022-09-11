@@ -26,6 +26,8 @@
 #include "common.h"
 #include "protocol.h"
 
+#include "saul_reg.h"
+
 #include "board.h"
 
 static lora_state_t lora;
@@ -252,6 +254,29 @@ void backup_mode(uint32_t seconds)
 }
 #endif
 
+int saul_cmd(int num)
+{
+	saul_reg_t *dev;
+	int dim;
+	phydat_t res;
+	int retval=9999;
+//    num = 4; // temp
+    dev = saul_reg_find_nth(num);
+    dim = saul_reg_read(dev, &res);
+//    printf("dim = %d\n", dim);
+    if (dim <= 0) {
+        // errore
+        printf("Error on saul_reg_read\n");
+    } else {
+//        printf("Phydat: %d %d %d\n", res.val[0], res.unit, res.scale);
+        printf("Reading from #%i (%s|%s)\n", num, (dev->name ? dev->name : "(no name)"), saul_class_to_str(dev->driver->type));
+        phydat_dump(&res, dim);
+        retval = res.val[0];
+    }
+    return retval;
+}
+
+
 int main(void)
 {
     memset(&lora, 0, sizeof(lora));
@@ -267,14 +292,29 @@ int main(void)
 
     msg_t msg;
     embit_packet_t *packet;
-	puts("\n\n\n");
+
+
+	puts("\n");
 	printf("LORA3A-TORTURE-TEST Compiled: %s,%s\n", __DATE__, __TIME__);
 
 
 #if defined(BOARD_LORA3A_SENSOR1) || defined(BOARD_LORA3A_H10) && !defined(H10RX)
 
+	int16_t bmetemp;
+	int16_t bmepress;
+	int16_t bmehum;
+	int16_t bmevoc;
+
+
 puts("Sensor set.");
     lora_off();
+    
+    
+	bmetemp = saul_cmd (4);
+	bmepress = saul_cmd (5);
+	bmehum = saul_cmd (6);
+	bmevoc = saul_cmd (7);
+    
     read_measures();
     if (RSTC->RCAUSE.reg == RSTC_RCAUSE_BACKUP) {
         // read persistent values
@@ -319,9 +359,10 @@ puts("Sensor set.");
     
     snprintf(
         message, MAX_PAYLOAD_LEN,
-        "id:%s,vcc:%ld,vpan:%ld,temp:%.2f,hum:%.2f,txp:%c:%d,rxdb:%d,rxsnr:%d,sleep:%lu",
-        cpuid, measures.vcc, measures.vpanel, measures.temp,
-        measures.hum, persist.boost?'B':'R', persist.tx_power, persist.last_rssi, persist.last_snr, seconds
+        "vcc:%ld,vpan:%ld,temp:%.2f,hum:%.2f,txp:%c:%d,rxdb:%d,rxsnr:%d,sleep:%lu,%d,%d,%d,%d",
+//        cpuid, 
+        measures.vcc, measures.vpanel, measures.temp,
+        measures.hum, persist.boost?'B':'R', persist.tx_power, persist.last_rssi, persist.last_snr, seconds, bmetemp, bmepress, bmehum, bmevoc
     );
     lora.power = persist.tx_power;
     if (lora_init(&(lora)) == 0) {
