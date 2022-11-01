@@ -162,19 +162,19 @@ void read_measures(void)
     ztimer_sleep(ZTIMER_MSEC, 30);
     measures.vpanel = adc_sample(ADC_VPANEL, ADC_RES_12BIT)*3933/4095; // adapted to real resistor partition value (75k over 220k)
     gpio_clear(VPANEL_ENABLE);
-    
+
     // read temp, hum
     read_hdc(&measures.temp, &measures.hum);
 }
 
 void parse_command(char *ptr, size_t len) {
 	char *token;
-	int8_t txpow=0; 
+	int8_t txpow=0;
     if((len > 2) && (strlen(ptr) == (size_t)(len-1)) && (ptr[0] == '@') && (ptr[len-2] == '$')) {
 		token = strtok(ptr+1, ",");
         uint32_t seconds = strtoul(token, NULL, 0);
         printf("Instructed to sleep for %lu seconds\n", seconds);
-        
+
         persist.sleep_seconds = (seconds > 0 ) && (seconds < 36000) ? (uint16_t)seconds : SLEEP_TIME_SEC;
         if ((uint32_t)persist.sleep_seconds != seconds) {
             printf("Corrected sleep value: %u seconds\n", persist.sleep_seconds);
@@ -186,13 +186,13 @@ void parse_command(char *ptr, size_t len) {
 		} else {
 			printf("RFO out selected!\n");
 			lora.boost = 0;
-		}		
+		}
         token = strtok(NULL, "$");
         txpow = atoi(token);
         if (txpow!=0) {
 			lora.power = txpow;
 			printf("Instructed to tx at level %d\n",txpow);
-		}	
+		}
         // to be added a complete error recovery/received commands validation for transmission errors
     }
 }
@@ -308,13 +308,13 @@ int main(void)
 
 puts("Sensor set.");
     lora_off();
-    
-    
+
+
 	bmetemp = saul_cmd (4);
 	bmepress = saul_cmd (5);
 	bmehum = saul_cmd (6);
 	bmevoc = saul_cmd (7);
-    
+
     read_measures();
     if (RSTC->RCAUSE.reg == RSTC_RCAUSE_BACKUP) {
         // read persistent values
@@ -356,16 +356,16 @@ puts("Sensor set.");
     char message[MAX_PAYLOAD_LEN];
     fmt_bytes_hex(cpuid, measures.cpuid, CPUID_LEN);
     cpuid[CPUID_LEN*2]='\0';
-    
+
     snprintf(
         message, MAX_PAYLOAD_LEN,
         "vcc:%ld,vpan:%ld,temp:%.2f,hum:%.2f,txp:%c:%d,rxdb:%d,rxsnr:%d,sleep:%lu,%d,%d,%d,%d",
-//        cpuid, 
+//        cpuid,
         measures.vcc, measures.vpanel, measures.temp,
         measures.hum, persist.boost?'B':'R', persist.tx_power, persist.last_rssi, persist.last_snr, seconds, bmetemp, bmepress, bmehum, bmevoc
     );
     lora.power = persist.tx_power;
-    if (lora_init(&(lora)) == 0) {
+    if (lora_init(&lora) == 0) {
         send_to(EMB_BROADCAST, message, strlen(message)+1);
         // wait for a command
         lora_listen();
@@ -392,23 +392,23 @@ puts("Sensor set.");
      rtc_mem_write(0, (char *)&persist, sizeof(persist));
     // enter deep sleep
     backup_mode(seconds);
-#endif    
+#endif
 //#else
 
 #if defined(BOARD_LORA3A_DONGLE) || defined(BOARD_LORA3A_H10) && defined(H10RX)
 puts("Gateway set.");
-    char str41[]="@300,B,1$"; 
-    char str42[]="@300,B,1$"; 
-    char str43[]="@720,R,14$"; 
-    char str44[]="@300,B,1$"; 
-    char str45[]="@300,B,1$"; 
-    char str46[]="@300,B,1$"; 
-    char str47[]="@300,B,1$"; 
-    char str49[]="@10,B,1$"; 
-    char str50[]="@60,B,1$"; 
-    char str62[]="@300,B,1$"; 
-    char str100[]="@720,R,14$"; 
-    char strdefault[]="@300,B,1$"; 
+    char str41[]="@300,B,1$";
+    char str42[]="@300,B,1$";
+    char str43[]="@720,R,14$";
+    char str44[]="@300,B,1$";
+    char str45[]="@300,B,1$";
+    char str46[]="@300,B,1$";
+    char str47[]="@300,B,1$";
+    char str49[]="@10,B,1$";
+    char str50[]="@60,B,1$";
+    char str62[]="@300,B,1$";
+    char str100[]="@720,R,14$";
+    char strdefault[]="@300,B,1$";
     memset(num_messages, 0, sizeof(num_messages));
     memset(last_message_no, 0, sizeof(last_message_no));
     memset(lost_messages, 0, sizeof(lost_messages));
@@ -466,9 +466,9 @@ puts("Gateway set.");
 						break;
 					default:
 						send_to(h->src, strdefault, strlen(strdefault)+1);
-						break;	
-			}	
-            
+						break;
+			}
+
             lora_listen();
         } else {
             ztimer_now_t now = ztimer_now(ZTIMER_MSEC);
@@ -478,7 +478,7 @@ puts("Gateway set.");
             }
         }
     }
-//#endif    
+//#endif
 //#endif
 #endif
     return 0;

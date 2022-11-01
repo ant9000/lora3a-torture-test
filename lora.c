@@ -39,6 +39,7 @@ int lora_init(const lora_state_t *state)
 
     sx127x.params = sx127x_params[0];
     netdev_t *netdev = (netdev_t *)&sx127x;
+    netdev->event_callback = _lora_event_cb;
     netdev->driver = &sx127x_driver;
 #if defined(BOARD_SAMR34_XPRO) || defined (BOARD_LORA3A_H10)
         gpio_init(TCXO_PWR_PIN, GPIO_OUT);
@@ -61,8 +62,6 @@ int lora_init(const lora_state_t *state)
     netdev->driver->set(netdev, NETOPT_CODING_RATE, &lora_cr, sizeof(lora_cr));
     netdev->driver->set(netdev, NETOPT_CHANNEL_FREQUENCY, &lora_ch, sizeof(lora_ch));
     netdev->driver->set(netdev, NETOPT_TX_POWER, &lora_pw, sizeof(lora_pw));
-
-    netdev->event_callback = _lora_event_cb;
 
     lora_recv_pid = thread_create(stack, sizeof(stack), THREAD_PRIORITY_MAIN - 1,
                               THREAD_CREATE_STACKTEST, _lora_recv_thread, NULL,
