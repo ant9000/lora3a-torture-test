@@ -40,7 +40,13 @@ static lora_state_t lora;
 #define SLEEP_TIME_SEC 5
 #endif
 #ifndef LISTEN_TIME_MSEC
-#define LISTEN_TIME_MSEC 110
+#ifndef CUSTOMER
+#define LISTEN_TIME_MSEC 150
+#else
+// use 450 if BW 125kHz
+//#define LISTEN_TIME_MSEC 450
+#define LISTEN_TIME_MSEC 150
+#endif
 #endif
 static struct {
     uint16_t sleep_seconds;
@@ -49,6 +55,7 @@ static struct {
     int8_t last_snr;
     uint8_t tx_power;
     uint8_t boost;
+    uint8_t retries;
 } persist;
 
 static struct {
@@ -76,6 +83,7 @@ static uint16_t lost_messages[255];
 
 static uint16_t emb_counter = 0;
 static embit_packet_t q_packet;
+static int gateway_received_rssi;
 static char q_payload[MAX_PACKET_LEN];
 static kernel_pid_t main_pid;
 
@@ -98,6 +106,7 @@ ssize_t packet_received(const embit_packet_t *packet)
     // discard packets if not for us and not broadcast
     if ((packet->header.dst != EMB_ADDRESS) && (packet->header.dst != EMB_BROADCAST)) { return 0; }
 
+
     // dump message to stdout
     printf(
         "{\"CNT\":%u,\"NET\":%u,\"DST\":%u,\"SRC\":%u,\"RSSI\":%d,\"SNR\":%d,\"LEN\"=%d,\"DATA\"=\"%s\"}\n",
@@ -108,6 +117,7 @@ ssize_t packet_received(const embit_packet_t *packet)
     memcpy(q_payload, packet->payload, packet->payload_len);
     memcpy(&q_packet, packet, sizeof(embit_packet_t));
     q_packet.payload = q_payload;
+    gateway_received_rssi = packet->rssi;
     msg.content.ptr = &q_packet;
     msg_send(&msg, main_pid);
     return 0;
@@ -173,6 +183,7 @@ void parse_command(char *ptr, size_t len) {
     if((len > 2) && (strlen(ptr) == (size_t)(len-1)) && (ptr[0] == '@') && (ptr[len-2] == '$')) {
 		token = strtok(ptr+1, ",");
         uint32_t seconds = strtoul(token, NULL, 0);
+//seconds = 5;        
         printf("Instructed to sleep for %lu seconds\n", seconds);
 
         persist.sleep_seconds = (seconds > 0 ) && (seconds < 36000) ? (uint16_t)seconds : SLEEP_TIME_SEC;
@@ -180,6 +191,9 @@ void parse_command(char *ptr, size_t len) {
             printf("Corrected sleep value: %u seconds\n", persist.sleep_seconds);
         }
         token = strtok(NULL, ",");
+        
+//token[0] = 'B';
+        
         if (token[0]=='B') {
 			printf("Boost out selected!\n");
 			lora.boost = 1;
@@ -189,6 +203,7 @@ void parse_command(char *ptr, size_t len) {
 		}
         token = strtok(NULL, "$");
         txpow = atoi(token);
+//txpow = 14;
         if (txpow!=0) {
 			lora.power = txpow;
 			printf("Instructed to tx at level %d\n",txpow);
@@ -214,41 +229,6 @@ void backup_mode(uint32_t seconds)
 #ifdef DEBUG_SAML21
     debug_saml21();
 #endif
-    // turn off PORT pins
-//    size_t num = sizeof(PORT->Group)/sizeof(PortGroup);
-//    size_t num1 = sizeof(PORT->Group[0].PINCFG)/sizeof(PORT_PINCFG_Type);
-//    for (size_t i=0; i<num; i++) {
-//        for (size_t j=0; j<num1; j++) {
-//            if (i != 0 || j != extwake) {
-//                PORT->Group[i].PINCFG[j].reg = 0;
-//            }
-//        }
-//    }
-    // add pullups to console pins
-//    for (size_t i=0; i<UART_NUMOF; i++) {
-//        gpio_init(uart_config[i].rx_pin, GPIO_IN_PU);
-//        gpio_init(uart_config[i].tx_pin, GPIO_IN_PU);
-//    }
-//#if defined(BOARD_SAMR34_XPRO) || defined (BOARD_LORA3A_H10)
-//    gpio_init(TCXO_PWR_PIN, GPIO_IN_PD);
-//    gpio_init(TX_OUTPUT_SEL_PIN, GPIO_IN_PD);
-//#endif
-// Rob switch off pins, not necessary anymore
-//    gpio_init(GPIO_PIN(PA, 9), GPIO_OUT);
-//    gpio_clear(GPIO_PIN(PA, 9));
-//    gpio_init(GPIO_PIN(PA, 13), GPIO_OUT);
-//    gpio_clear(GPIO_PIN(PA, 13));
-
-//    gpio_init(GPIO_PIN(PA, 4), GPIO_IN_PU);
-//    gpio_init(GPIO_PIN(PA, 5), GPIO_IN_PU);
-//    gpio_init(GPIO_PIN(PA, 6), GPIO_IN_PU);
-//    gpio_init(GPIO_PIN(PA, 7), GPIO_IN_PU);
-//    gpio_init(GPIO_PIN(PA, 8), GPIO_IN_PD);
-
-//    gpio_init(GPIO_PIN(PB, 2), GPIO_IN_PU);
-//    gpio_init(GPIO_PIN(PB, 3), GPIO_IN_PU);
-//    gpio_init(GPIO_PIN(PB, 22), GPIO_IN_PU);
-//    gpio_init(GPIO_PIN(PB, 23), GPIO_IN_PU);
 
     pm_set(0);
 }
@@ -260,15 +240,12 @@ int saul_cmd(int num)
 	int dim;
 	phydat_t res;
 	int retval=9999;
-//    num = 4; // temp
     dev = saul_reg_find_nth(num);
     dim = saul_reg_read(dev, &res);
-//    printf("dim = %d\n", dim);
     if (dim <= 0) {
         // errore
         printf("Error on saul_reg_read\n");
     } else {
-//        printf("Phydat: %d %d %d\n", res.val[0], res.unit, res.scale);
         printf("Reading from #%i (%s|%s)\n", num, (dev->name ? dev->name : "(no name)"), saul_class_to_str(dev->driver->type));
         phydat_dump(&res, dim);
         retval = res.val[0];
@@ -293,10 +270,8 @@ int main(void)
     msg_t msg;
     embit_packet_t *packet;
 
-
 	puts("\n");
 	printf("LORA3A-TORTURE-TEST Compiled: %s,%s\n", __DATE__, __TIME__);
-
 
 #if defined(BOARD_LORA3A_SENSOR1) || defined(BOARD_LORA3A_H10) && !defined(H10RX)
 
@@ -305,10 +280,8 @@ int main(void)
 	int16_t bmehum;
 	int16_t bmevoc;
 
-
-puts("Sensor set.");
+	printf("Sensor set. Address: %d Bandwidth: %d Frequency: %ld Listen Time ms: %d\n", EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, LISTEN_TIME_MSEC);
     lora_off();
-
 
 	bmetemp = saul_cmd (4);
 	bmepress = saul_cmd (5);
@@ -337,20 +310,31 @@ puts("Sensor set.");
     uint32_t seconds = persist.sleep_seconds;
     if (seconds) { printf("Sleep value from persistence: %lu seconds\n", seconds); }
     seconds = (seconds > 0) && (seconds < 36000) ? seconds : SLEEP_TIME_SEC;
+// first strategy of power saving on vcc value
+#if 0
     uint8_t lpVcc = (measures.vcc < 2900) ? 1 : 0;
-    uint8_t lpVpanel = (measures.vpanel < 2000) ? 1 : 0;
     if (lpVcc) {
         seconds = seconds * 4 < 0xffff ? seconds * 4 : 0xffff;
     }
+#endif
+// second strategy of power saving on vcc value
+#if 1
+	int vccReductionFactor = 1;
+	if (measures.vcc < 2800) vccReductionFactor = 120;
+	else if (measures.vcc < 2900) vccReductionFactor = 60;
+	else if (measures.vcc < 3000) vccReductionFactor = 30;
+	else if (measures.vcc < 3100) vccReductionFactor = 15;
+	else if (measures.vcc < 3200) vccReductionFactor = 5;
+	else vccReductionFactor = 1;
+	seconds = seconds * vccReductionFactor;
+#endif
+    uint8_t lpVpanel = (measures.vpanel < 2000) ? 1 : 0;
     if (lpVpanel) {
         seconds = seconds * 5 < 0xffff ? seconds * 5 : 0xffff;
     }
-    if (persist.sleep_seconds != seconds) {
-        printf(
-            "Adjusted sleep value: %lu seconds; lpVcc = %d; lpVpanel = %d\n",
-            seconds, lpVcc, lpVpanel
-        );
-    }
+
+    printf("vccReductionFactor = %d, lpVpanel = %d, Adjusted sleep value: %lu seconds, persist.sleep_seconds = %d\n", vccReductionFactor, lpVpanel, seconds, persist.sleep_seconds );
+    
     // send measures
     char cpuid[CPUID_LEN*2+1];
     char message[MAX_PAYLOAD_LEN];
@@ -374,12 +358,23 @@ puts("Sensor set.");
             packet = (embit_packet_t *)msg.content.ptr;
             persist.last_rssi = packet->rssi;
             persist.last_snr = packet->snr;
-            printf("rx rssi %d, rx snr %d\n",packet->rssi, packet->snr);
+            persist.retries = 2;
+            printf("rx rssi %d, rx snr %d, retries=%d\n",packet->rssi, packet->snr, persist.retries);
             char *ptr = packet->payload;
             size_t len = packet->payload_len;
             parse_command(ptr, len);
         } else {
             puts("No command received.");
+            if (persist.retries > 0) {
+				persist.retries--;
+			} else {
+				// elapsed max number of retries	
+				// set power to maximum and after 10 seconds send again.
+				lora.boost = 1;
+				lora.power = 14;
+			}
+            seconds = 5 + EMB_ADDRESS % 10;
+			printf("retries = %d, new seconds for retry = %ld\n", persist.retries, seconds);
         }
     } else {
         puts("ERROR: cannot initialize radio.");
@@ -393,22 +388,12 @@ puts("Sensor set.");
     // enter deep sleep
     backup_mode(seconds);
 #endif
-//#else
 
 #if defined(BOARD_LORA3A_DONGLE) || defined(BOARD_LORA3A_H10) && defined(H10RX)
-puts("Gateway set.");
-    char str41[]="@300,B,1$";
-    char str42[]="@300,B,1$";
-    char str43[]="@720,R,14$";
-    char str44[]="@300,B,1$";
-    char str45[]="@300,B,1$";
-    char str46[]="@300,B,1$";
-    char str47[]="@300,B,1$";
-    char str49[]="@10,B,1$";
-    char str50[]="@60,B,1$";
-    char str62[]="@300,B,1$";
-    char str100[]="@720,R,14$";
-    char strdefault[]="@300,B,1$";
+printf("Gateway set. Address: %d Bandwidth: %d Frequency: %ld \n", EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL);
+    char str_to_node[20];
+    int interval_time = 60;
+
     memset(num_messages, 0, sizeof(num_messages));
     memset(last_message_no, 0, sizeof(last_message_no));
     memset(lost_messages, 0, sizeof(lost_messages));
@@ -429,46 +414,62 @@ puts("Gateway set.");
                 lost_messages[h->src] += h->counter - last_message_no[h->src] - 1;
             }
             last_message_no[h->src] = h->counter;
-            // send command
-            switch (h->src) {
-					case 41:
-						send_to(h->src, str41, strlen(str41)+1);
-						break;
-					case 42:
-						send_to(h->src, str42, strlen(str42)+1);
-						break;
-					case 43:
-						send_to(h->src, str43, strlen(str43)+1);
-						break;
-					case 44:
-						send_to(h->src, str44, strlen(str44)+1);
-						break;
-					case 45:
-						send_to(h->src, str45, strlen(str45)+1);
-						break;
-					case 46:
-						send_to(h->src, str46, strlen(str46)+1);
-						break;
-					case 47:
-						send_to(h->src, str47, strlen(str47)+1);
-						break;
-					case 49:
-						send_to(h->src, str49, strlen(str49)+1);
-						break;
-					case 50:
-						send_to(h->src, str50, strlen(str50)+1);
-						break;
-					case 62:
-						send_to(h->src, str62, strlen(str62)+1);
-						break;
-					case 100:
-						send_to(h->src, str100, strlen(str100)+1);
-						break;
-					default:
-						send_to(h->src, strdefault, strlen(strdefault)+1);
-						break;
+            
+		// automatic sensor-node power adaptation for distance (fixed target now at -90dBm)
+		//    printf("payload=%s\n", q_payload);
+			char mypayload[30][7];
+			char *token = strtok(q_payload, ":,");
+			int i=0;
+			int node_boostmode=0;
+			int node_power=14;
+			int node_rxdb=-90;
+			while( token != NULL) {
+				sprintf(mypayload[i], "%s", token);
+				i++;
+				token = strtok(NULL, ":,");
+			}	 
+		//	printf("%s,%s,%s\n",mypayload[9],mypayload[10],mypayload[12]);
+			if (mypayload[9][0] == 'B') node_boostmode = 1; else node_boostmode = 0;
+			node_power = atoi(mypayload[10]);
+			if (node_power == 0) node_power = 14; // if atoi returns zero for no conversion made
+			node_rxdb = atoi(mypayload[12]);
+			if (node_rxdb == 0) {  // if last time the node_sensor has not received the ack set its power to the maximum
+				node_power = 14;
+				node_boostmode = 1;
 			}
-
+		//	printf("extracted: rx_rssi= %d, boost=%d, power=%d, rxdb=%d\n", gateway_received_rssi, node_boostmode, node_power, node_rxdb);
+			// strategy to reduce power if node is near (> -90dBm)
+			if (gateway_received_rssi > -90) {
+				// we have to reduce the node tx power
+				if (node_power > 1) node_power--;
+				else if (node_power == 1) {
+					if (node_boostmode == 1) { node_boostmode = 0; node_power = 14; }
+		//			else printf ("Already at R,1 power! \n");
+				}	
+			} else {
+				// we have to increase the node tx power
+				if (node_power < 14) node_power++;
+				else if (node_power == 14) {
+					if (node_boostmode == 0) { node_boostmode = 1; node_power = 1; }
+		//			else printf ("Already at B,14 power! \n");
+				}	
+			}
+		//	printf("New power to set: %c, %d\n", (node_boostmode ? 'B' : 'R'),	node_power);
+			switch (h->src) {
+				case 41: interval_time = 300;	break;
+				case 42: interval_time = 300;	break;
+				case 43: interval_time = 720;	break;
+				case 44: interval_time = 300;	break;
+				case 45: interval_time = 300;	break;
+				case 46: interval_time = 300;	break;
+				case 47: interval_time = 300;	break;
+//				case 71: interval_time = 5;		break;
+				case 100: interval_time = 720;	break;
+				default: interval_time = 60;	break;
+			}
+			sprintf(str_to_node,"@%d,%c,%d$", interval_time, (node_boostmode ? 'B' : 'R'), node_power);
+			printf("new node settings: %s\n", str_to_node); 
+			send_to(h->src, str_to_node, strlen(str_to_node)+1);
             lora_listen();
         } else {
             ztimer_now_t now = ztimer_now(ZTIMER_MSEC);
@@ -478,8 +479,6 @@ puts("Gateway set.");
             }
         }
     }
-//#endif
-//#endif
 #endif
     return 0;
 }

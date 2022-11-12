@@ -6,6 +6,7 @@ DEVELHELP ?= 1
 BME688_ACME1 ?= 0
 BME688_ACME2 ?= 0
 H10RX ?= 0
+CUSTOMER ?= 0
 
 ROLE ?= node
 AES ?= 1
@@ -27,6 +28,9 @@ USEMODULE += ztimer_usec
 
 ifeq ($(H10RX), 1)
   CFLAGS += -DH10RX
+endif
+ifeq ($(CUSTOMER), 1)
+  CFLAGS += -DCUSTOMER
 endif
 
 ifeq ($(BOARD),lora3a-h10)
