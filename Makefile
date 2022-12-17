@@ -1,6 +1,9 @@
 APPLICATION = lora3a-torture-test
 RIOTBASE ?= $(CURDIR)/../RIOT
-EXTERNAL_BOARD_DIRS ?= $(CURDIR)/../lora3a-boards/boards
+LORA3ABASE ?= $(CURDIR)/../lora3a-boards
+EXTERNAL_BOARD_DIRS=$(LORA3ABASE)/boards
+EXTERNAL_MODULE_DIRS=$(LORA3ABASE)/modules
+EXTERNAL_PKG_DIRS=$(LORA3ABASE)/pkg
 QUIET ?= 1
 DEVELHELP ?= 1
 BME688_ACME1 ?= 0
@@ -25,6 +28,7 @@ USEMODULE += periph_rtt
 USEMODULE += periph_rtc_mem
 USEMODULE += periph_spi_reconfigure
 USEMODULE += ztimer_usec
+USEMODULE += debug_saml21
 
 ifeq ($(H10RX), 1)
   CFLAGS += -DH10RX
