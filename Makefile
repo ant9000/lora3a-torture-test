@@ -31,7 +31,7 @@ USEMODULE += periph_spi_reconfigure
 USEMODULE += ztimer_usec
 
 ifeq ($(DEBUG_SAML21), 1)
-  USEMODULE += debug_saml21
+  USEMODULE += saml21_cpu_debug
   CFLAGS += -DDEBUG_SAML21
 endif
 

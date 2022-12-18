@@ -18,7 +18,7 @@
 #include "shell.h"
 
 #ifdef DEBUG_SAML21
-#include "debug_saml21.h"
+#include "saml21_cpu_debug.h"
 #endif
 #endif
 
@@ -227,7 +227,7 @@ void backup_mode(uint32_t seconds)
     // turn off radio
     lora_off();
 #ifdef DEBUG_SAML21
-    debug_saml21();
+    saml21_cpu_debug();
 #endif
 
     pm_set(0);
