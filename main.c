@@ -20,6 +20,7 @@
 #ifdef DEBUG_SAML21
 #include "saml21_cpu_debug.h"
 #endif
+#include "saml21_backup_mode.h"
 #endif
 
 
@@ -31,6 +32,14 @@
 #include "board.h"
 
 static lora_state_t lora;
+
+/* use { .pin=EXTWAKE_NONE } to disable */
+#define EXTWAKE { \
+    .pin=EXTWAKE_PIN6, \
+    .polarity=EXTWAKE_HIGH, \
+    .flags=EXTWAKE_IN_PU }
+
+//static saml21_extwake_t extwake = EXTWAKE;
 
 #if defined(BOARD_LORA3A_SENSOR1) || defined(BOARD_LORA3A_H10)
 #ifndef EMB_ADDRESS
@@ -214,6 +223,8 @@ void parse_command(char *ptr, size_t len) {
 
 void backup_mode(uint32_t seconds)
 {
+	puts("backup_mode entered\n");
+#if 1
     uint8_t extwake = 6;
     // PA06 aka BTN0 can wake up the board
     gpio_init(GPIO_PIN(PA, extwake), GPIO_IN_PU);
@@ -226,13 +237,21 @@ void backup_mode(uint32_t seconds)
     puts("Now entering backup mode.");
     // turn off radio
     lora_off();
+gpio_init(GPIO_PIN(PB, 2), GPIO_IN_PU);
+gpio_init(GPIO_PIN(PB, 3), GPIO_IN_PU);
 #ifdef DEBUG_SAML21
     saml21_cpu_debug();
 #endif
-
     pm_set(0);
+#else
+#ifdef DEBUG_SAML21
+    saml21_cpu_debug();
+#endif
+    saml21_backup_mode_enter(extwake, (int)seconds);
+#endif
 }
 #endif
+
 
 int saul_cmd(int num)
 {
@@ -373,7 +392,7 @@ int main(void)
 				lora.boost = 1;
 				lora.power = 14;
 			}
-            seconds = 5 + EMB_ADDRESS % 10;
+            seconds = 25 + EMB_ADDRESS % 10;
 			printf("retries = %d, new seconds for retry = %ld\n", persist.retries, seconds);
         }
     } else {
@@ -386,6 +405,7 @@ int main(void)
     persist.boost = lora.boost;
      rtc_mem_write(0, (char *)&persist, sizeof(persist));
     // enter deep sleep
+
     backup_mode(seconds);
 #endif
 

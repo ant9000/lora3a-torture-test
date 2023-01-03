@@ -29,6 +29,7 @@ USEMODULE += periph_rtt
 USEMODULE += periph_rtc_mem
 USEMODULE += periph_spi_reconfigure
 USEMODULE += ztimer_usec
+USEMODULE += saml21_backup_mode
 
 ifeq ($(DEBUG_SAML21), 1)
   USEMODULE += saml21_cpu_debug
