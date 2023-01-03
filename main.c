@@ -224,7 +224,6 @@ void parse_command(char *ptr, size_t len) {
 void backup_mode(uint32_t seconds)
 {
 	puts("backup_mode entered\n");
-    lora_off();
 #ifdef DEBUG_SAML21
     saml21_cpu_debug();
 #endif
