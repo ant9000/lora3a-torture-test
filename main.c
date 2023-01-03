@@ -20,8 +20,8 @@
 #ifdef DEBUG_SAML21
 #include "saml21_cpu_debug.h"
 #endif
-#include "saml21_backup_mode.h"
 #endif
+#include "saml21_backup_mode.h"
 
 
 #include "common.h"
@@ -39,7 +39,7 @@ static lora_state_t lora;
     .polarity=EXTWAKE_HIGH, \
     .flags=EXTWAKE_IN_PU }
 
-//static saml21_extwake_t extwake = EXTWAKE;
+static saml21_extwake_t extwake = EXTWAKE;
 
 #if defined(BOARD_LORA3A_SENSOR1) || defined(BOARD_LORA3A_H10)
 #ifndef EMB_ADDRESS
@@ -224,31 +224,11 @@ void parse_command(char *ptr, size_t len) {
 void backup_mode(uint32_t seconds)
 {
 	puts("backup_mode entered\n");
-#if 1
-    uint8_t extwake = 6;
-    // PA06 aka BTN0 can wake up the board
-    gpio_init(GPIO_PIN(PA, extwake), GPIO_IN_PU);
-    RSTC->WKEN.reg = 1 << extwake;
-    RSTC->WKPOL.reg &= ~(1 << extwake);
-    // schedule a wakeup alarm
-    rtt_set_counter(0);
-    rtt_set_alarm(RTT_SEC_TO_TICKS(seconds), NULL, NULL);
-
-    puts("Now entering backup mode.");
-    // turn off radio
     lora_off();
-gpio_init(GPIO_PIN(PB, 2), GPIO_IN_PU);
-gpio_init(GPIO_PIN(PB, 3), GPIO_IN_PU);
-#ifdef DEBUG_SAML21
-    saml21_cpu_debug();
-#endif
-    pm_set(0);
-#else
 #ifdef DEBUG_SAML21
     saml21_cpu_debug();
 #endif
     saml21_backup_mode_enter(extwake, (int)seconds);
-#endif
 }
 #endif
 
