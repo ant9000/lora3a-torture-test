@@ -228,7 +228,7 @@ void backup_mode(uint32_t seconds)
 #ifdef DEBUG_SAML21
     saml21_cpu_debug();
 #endif
-    saml21_backup_mode_enter(extwake, (int)seconds);
+    saml21_backup_mode_enter(RADIO_OFF_NOT_REQUESTED, extwake, (int)seconds);
 }
 #endif
 
