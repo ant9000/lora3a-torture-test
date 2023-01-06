@@ -279,7 +279,8 @@ int main(void)
 	int16_t bmehum;
 	int16_t bmevoc;
 
-	printf("Sensor set. Address: %d Bandwidth: %d Frequency: %ld Listen Time ms: %d\n", EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, LISTEN_TIME_MSEC);
+	printf("Gateway set. Address: %d Bandwidth: %d Frequency: %ld Spreading: %d Coderate: %d Listen Time ms: %d\n", 
+	EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor, lora.coderate, LISTEN_TIME_MSEC);
     lora_off();
 
 	bmetemp = saul_cmd (4);
@@ -390,7 +391,8 @@ int main(void)
 #endif
 
 #if defined(BOARD_LORA3A_DONGLE) || defined(BOARD_LORA3A_H10) && defined(H10RX)
-printf("Gateway set. Address: %d Bandwidth: %d Frequency: %ld \n", EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL);
+printf("Gateway set. Address: %d Bandwidth: %d Frequency: %ld Spreading: %d Coderate: %d\n", 
+EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor, lora.coderate);
     char str_to_node[20];
     int interval_time = 60;
 
@@ -465,7 +467,7 @@ printf("Gateway set. Address: %d Bandwidth: %d Frequency: %ld \n", EMB_ADDRESS, 
 				case 47: interval_time = 300;	break;
 //				case 71: interval_time = 5;		break;
 				case 100: interval_time = 720;	break;
-				default: interval_time = 60;	break;
+				default: interval_time = 15;	break;
 			}
 			sprintf(str_to_node,"@%d,%c,%d$", interval_time, (node_boostmode ? 'B' : 'R'), node_power);
 			printf("new node settings: %s\n", str_to_node); 
