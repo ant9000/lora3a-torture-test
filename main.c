@@ -30,6 +30,7 @@
 #include "saul_reg.h"
 
 #include "board.h"
+#include "daffy.h"
 
 static lora_state_t lora;
 
@@ -228,7 +229,7 @@ void backup_mode(uint32_t seconds)
 #ifdef DEBUG_SAML21
     saml21_cpu_debug();
 #endif
-    saml21_backup_mode_enter(RADIO_OFF_NOT_REQUESTED, extwake, (int)seconds);
+    saml21_backup_mode_enter(RADIO_OFF_NOT_REQUESTED, extwake, (int)seconds, 1);
 }
 #endif
 
@@ -391,6 +392,28 @@ int main(void)
 #endif
 
 #if defined(BOARD_LORA3A_DONGLE) || defined(BOARD_LORA3A_H10) && defined(H10RX)
+
+#ifdef DAFFY
+uint8_t daffyAddress[] = {0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3c, 0x3d, 0x3e, 0x3f};
+uint8_t daffyPresent[] = {0,0,0,0,0,0,0,0};
+uint8_t daffyInput[] = {0,0,0,0,0,0,0,0};
+uint8_t TDKon[] = {0,0,0,0};
+uint8_t presentTDKon;
+// test Daffy presence
+	uint8_t retVal=0;
+	uint8_t i;
+	for (i=0; i<8; i++) {
+		retVal = probeDaffy(daffyAddress[i]);
+		printf("Daffy %d retVal = %d\n", i, retVal); 
+		if (retVal == 0) {
+			daffyPresent[i] = 1;
+			initDaffy(daffyAddress[i]);
+			readDaffy(daffyAddress[i], &daffyInput[i]);
+			printf("Daffy %d initialised. Input Values: 0x%0x\n", i, daffyInput[i]);
+		}
+	}		
+#endif
+
 printf("Gateway set. Address: %d Bandwidth: %d Frequency: %ld Spreading: %d Coderate: %d\n", 
 EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor, lora.coderate);
     char str_to_node[20];
@@ -407,6 +430,9 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
     lora_listen();
     lora.boost=1;
     ztimer_now_t last_stats_run = 0;
+    ztimer_now_t last_daffy0_write = 0;
+    ztimer_now_t last_daffy1_write = 0;
+    
     for (;;) {
         if (ztimer_msg_receive_timeout(ZTIMER_MSEC, &msg, 1000) != -ETIME) {
             packet = (embit_packet_t *)msg.content.ptr;
@@ -425,12 +451,63 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 			int node_boostmode=0;
 			int node_power=14;
 			int node_rxdb=-90;
+			uint16_t tdkRange=9999;
 			while( token != NULL) {
 				sprintf(mypayload[i], "%s", token);
 				i++;
 				token = strtok(NULL, ":,");
 			}	 
-		//	printf("%s,%s,%s\n",mypayload[9],mypayload[10],mypayload[12]);
+			printf("%s,%s,%s,%s\n",mypayload[9],mypayload[10],mypayload[12],mypayload[18]);
+			tdkRange=atoi(mypayload[18]);
+			printf("tdkRange=%dmm\n", tdkRange);
+			// gestione relays
+#ifdef DAFFY			
+			if (daffyPresent[0] && h->src==24) {
+				if (tdkRange > 2400) {
+					// all relays off
+					writeDaffy(daffyAddress[0], 0x00);
+				} else {
+					ztimer_now_t now = ztimer_now(ZTIMER_MSEC);
+					last_daffy0_write = now;
+					if (tdkRange > 2000) {
+						writeDaffy(daffyAddress[0], 0x10);
+					} else {
+						if (tdkRange > 1500) {
+							writeDaffy(daffyAddress[0], 0x30);
+						} else {
+							if (tdkRange > 1000) {
+								writeDaffy(daffyAddress[0], 0x70);
+							} else {
+								writeDaffy(daffyAddress[0], 0xF0);
+							}
+						}
+					}
+				}				
+			}
+			if (daffyPresent[1] && h->src==25) {
+				if (tdkRange > 2400) {
+					// all relays off
+					writeDaffy(daffyAddress[1], 0x00);
+				} else {
+					ztimer_now_t now = ztimer_now(ZTIMER_MSEC);
+					last_daffy1_write = now;
+					if (tdkRange > 2000) {
+						writeDaffy(daffyAddress[1], 0x10);
+					} else {
+						if (tdkRange > 1500) {
+							writeDaffy(daffyAddress[1], 0x30);
+						} else {
+							if (tdkRange > 1000) {
+								writeDaffy(daffyAddress[1], 0x70);
+							} else {
+								writeDaffy(daffyAddress[1], 0xF0);
+							}
+						}
+					}
+				}				
+			}
+
+#endif			
 			if (mypayload[9][0] == 'B') node_boostmode = 1; else node_boostmode = 0;
 			node_power = atoi(mypayload[10]);
 			if (node_power == 0) node_power = 14; // if atoi returns zero for no conversion made
@@ -457,6 +534,7 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 				}	
 			}
 		//	printf("New power to set: %c, %d\n", (node_boostmode ? 'B' : 'R'),	node_power);
+			presentTDKon = 0;
 			switch (h->src) {
 				case 41: interval_time = 300;	break;
 				case 42: interval_time = 300;	break;
@@ -467,9 +545,19 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 				case 47: interval_time = 300;	break;
 //				case 71: interval_time = 5;		break;
 				case 100: interval_time = 720;	break;
-				default: interval_time = 15;	break;
+				case 24: {  // TDK equipped node sensor
+					interval_time = 60;	
+					presentTDKon = TDKon[0];
+					}
+					break;
+				case 25: {  // TDK equipped node sensor
+					interval_time = 60;	
+					presentTDKon = TDKon[1];
+					}
+					break;
+				default: interval_time = 60;	break;
 			}
-			sprintf(str_to_node,"@%d,%c,%d$", interval_time, (node_boostmode ? 'B' : 'R'), node_power);
+			sprintf(str_to_node,"@%d,%c,%d,%d$", interval_time, (node_boostmode ? 'B' : 'R'), node_power, presentTDKon);
 			printf("new node settings: %s\n", str_to_node); 
 			send_to(h->src, str_to_node, strlen(str_to_node)+1);
             lora_listen();
@@ -479,6 +567,43 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
                 last_stats_run = now;
                 print_stats();
             }
+#ifdef DAFFY            
+            if (now >= last_daffy0_write + 5000) {
+                last_daffy0_write = now;
+                if (daffyPresent[0]) {
+					writeDaffy(daffyAddress[0], 0x00);  // 5s after last alarm shut off leds
+//					puts("Shut Off LEDs Daffy1");
+				}	
+            }
+            if (now >= last_daffy1_write + 5000) {
+                last_daffy1_write = now;
+                if (daffyPresent[1]) {
+					writeDaffy(daffyAddress[1], 0x00);  // 5s after last alarm shut off leds
+//					puts("Shut Off LEDs Daffy2");
+				}	
+            }
+            uint8_t val;
+			if (daffyPresent[0]) {
+				// update switches status
+				readDaffy(daffyAddress[0], &val);
+				if (val != daffyInput[0]) {
+					daffyInput[0]=val;
+					printf("Changed Daffy0 Value: 0x%02x\n", val);
+					TDKon[0] = val;
+				}
+			}
+			if (daffyPresent[1]) {
+				// update switches status
+				readDaffy(daffyAddress[1], &val);
+				if (val != daffyInput[1]) {
+					daffyInput[1]=val;
+					printf("Changed Daffy1 Value: 0x%02x\n", val);
+					TDKon[1] = val;
+				}
+			}
+			
+#endif            
+            
         }
     }
 #endif
