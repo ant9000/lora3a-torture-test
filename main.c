@@ -17,6 +17,8 @@
 #include "hdc.h"
 #include "shell.h"
 
+//#define TDK
+
 #ifdef DEBUG_SAML21
 #include "saml21_cpu_debug.h"
 #endif
@@ -311,16 +313,17 @@ int main(void)
     uint32_t seconds = persist.sleep_seconds;
     if (seconds) { printf("Sleep value from persistence: %lu seconds\n", seconds); }
     seconds = (seconds > 0) && (seconds < 36000) ? seconds : SLEEP_TIME_SEC;
+
+	int vccReductionFactor = 4;
 // first strategy of power saving on vcc value
-#if 0
+#if 1
     uint8_t lpVcc = (measures.vcc < 2900) ? 1 : 0;
     if (lpVcc) {
-        seconds = seconds * 4 < 0xffff ? seconds * 4 : 0xffff;
+        seconds = seconds * vccReductionFactor < 0xffff ? seconds * vccReductionFactor : 0xffff;
     }
 #endif
 // second strategy of power saving on vcc value
-#if 1
-	int vccReductionFactor = 1;
+#if 0
 	if (measures.vcc < 2800) vccReductionFactor = 120;
 	else if (measures.vcc < 2900) vccReductionFactor = 60;
 	else if (measures.vcc < 3000) vccReductionFactor = 30;
@@ -397,8 +400,10 @@ int main(void)
 uint8_t daffyAddress[] = {0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3c, 0x3d, 0x3e, 0x3f};
 uint8_t daffyPresent[] = {0,0,0,0,0,0,0,0};
 uint8_t daffyInput[] = {0,0,0,0,0,0,0,0};
-uint8_t TDKon[] = {0,0,0,0};
+uint8_t TDKon[] = {1,1,0,0};
+#ifdef TDK
 uint8_t presentTDKon;
+#endif
 // test Daffy presence
 	uint8_t retVal=0;
 	uint8_t i;
@@ -430,9 +435,10 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
     lora_listen();
     lora.boost=1;
     ztimer_now_t last_stats_run = 0;
+ #ifdef DAFFY    
     ztimer_now_t last_daffy0_write = 0;
     ztimer_now_t last_daffy1_write = 0;
-    
+#endif    
     for (;;) {
         if (ztimer_msg_receive_timeout(ZTIMER_MSEC, &msg, 1000) != -ETIME) {
             packet = (embit_packet_t *)msg.content.ptr;
@@ -534,7 +540,9 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 				}	
 			}
 		//	printf("New power to set: %c, %d\n", (node_boostmode ? 'B' : 'R'),	node_power);
+#ifdef TDK
 			presentTDKon = 0;
+#endif
 			switch (h->src) {
 				case 41: interval_time = 300;	break;
 				case 42: interval_time = 300;	break;
@@ -547,17 +555,25 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 				case 100: interval_time = 720;	break;
 				case 24: {  // TDK equipped node sensor
 					interval_time = 60;	
+#ifdef TDK					
 					presentTDKon = TDKon[0];
+#endif
 					}
 					break;
 				case 25: {  // TDK equipped node sensor
 					interval_time = 60;	
+#ifdef TDK					
 					presentTDKon = TDKon[1];
+#endif
 					}
 					break;
 				default: interval_time = 60;	break;
 			}
+#ifdef TDK
 			sprintf(str_to_node,"@%d,%c,%d,%d$", interval_time, (node_boostmode ? 'B' : 'R'), node_power, presentTDKon);
+#else
+			sprintf(str_to_node,"@%d,%c,%d$", interval_time, (node_boostmode ? 'B' : 'R'), node_power);
+#endif
 			printf("new node settings: %s\n", str_to_node); 
 			send_to(h->src, str_to_node, strlen(str_to_node)+1);
             lora_listen();

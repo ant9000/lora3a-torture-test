@@ -12,6 +12,7 @@ H10RX ?= 0
 CUSTOMER ?= 0
 DEBUG_SAML21 ?= 0
 DAFFY ?= 0
+RESISTOR ?= 0
 
 ROLE ?= node
 AES ?= 1
@@ -32,6 +33,10 @@ USEMODULE += periph_spi_reconfigure
 USEMODULE += ztimer_usec
 USEMODULE += saml21_backup_mode
 USEMODULE += saml21_cpu_debug
+
+ifeq ($(RESISTOR), 1)
+  CFLAGS += -DRESISTOR
+endif
 
 ifeq ($(DAFFY), 1)
   CFLAGS += -DDAFFY
