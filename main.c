@@ -17,7 +17,10 @@
 #include "hdc.h"
 #include "shell.h"
 
+
 //#define TDK
+#define ENABLE_DEBUG      1
+#include "debug.h"
 
 #ifdef DEBUG_SAML21
 #include "saml21_cpu_debug.h"
@@ -174,16 +177,45 @@ void print_stats(void)
 
 void read_measures(void)
 {
+	int32_t misure[35], averagemisure=0;
     // get cpuid
-    cpuid_get(&measures.cpuid);
-    // read vcc
-    measures.vcc = adc_sample(ADC_VCC, ADC_RES_12BIT)*4000/4095;  // corrected value (1V = 4095 counts)
-    // read vpanel
     gpio_init(VPANEL_ENABLE, GPIO_OUT);
     gpio_set(VPANEL_ENABLE);
-    ztimer_sleep(ZTIMER_MSEC, 30);
-    measures.vpanel = adc_sample(ADC_VPANEL, ADC_RES_12BIT)*3933/4095; // adapted to real resistor partition value (75k over 220k)
+    cpuid_get(&measures.cpuid);
+    // read ten values to check stability VCC
+    DEBUG("misurevcc: ");
+    int8_t i;
+    for (i=0; i<35; i++) {
+		misure[i]= adc_sample(ADC_VCC, ADC_RES_12BIT);  
+		if (i>2) averagemisure+=misure[i];
+	}	
+    for (i=0; i<35; i++) {
+		DEBUG("%ld ",misure[i]);
+		if (i==2) DEBUG("- ");
+	}	
+	printf(" averagevcc= %ld\n",averagemisure);
+    // read vcc
+//    measures.vcc = adc_sample(ADC_VCC, ADC_RES_12BIT)*4000/4095;  // corrected value (1V = 4095 counts)
+//	measures.vcc = (averagemisure*4000/4095) >> 5;  // corrected value (1V = 4095 counts)
+	measures.vcc = ((averagemisure*9768)/1000) >> 5;  // corrected value (1V = 4095 counts)
+	averagemisure=0;
+    // read vpanel
+//    ztimer_sleep(ZTIMER_MSEC, 30);
+  
+	DEBUG("misurepanel: ");
+    for (i=0; i<35; i++) {
+		misure[i]= adc_sample(ADC_VPANEL, ADC_RES_12BIT); 
+		if (i>2) averagemisure+=misure[i];
+	}	
     gpio_clear(VPANEL_ENABLE);
+    for (i=0; i<35; i++) {
+		DEBUG("%ld ",misure[i]);
+		if (i==2) DEBUG("- ");
+	}	
+	DEBUG(" averagepanel= %ld\n",averagemisure);
+  
+//    measures.vpanel = adc_sample(ADC_VPANEL, ADC_RES_12BIT)*3933/4095; // adapted to real resistor partition value (75k over 220k)
+	measures.vpanel = (averagemisure*3933/4095) >> 5;  // adapted to real resistor partition value (75k over 220k)
 
     // read temp, hum
     read_hdc(&measures.temp, &measures.hum);
@@ -282,7 +314,7 @@ int main(void)
 	int16_t bmehum;
 	int16_t bmevoc;
 
-	printf("Gateway set. Address: %d Bandwidth: %d Frequency: %ld Spreading: %d Coderate: %d Listen Time ms: %d\n", 
+	printf("Node Sensor set. Address: %d Bandwidth: %d Frequency: %ld Spreading: %d Coderate: %d Listen Time ms: %d\n", 
 	EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor, lora.coderate, LISTEN_TIME_MSEC);
     lora_off();
 
@@ -291,7 +323,6 @@ int main(void)
 	bmehum = saul_cmd (6);
 	bmevoc = saul_cmd (7);
 
-    read_measures();
     if (RSTC->RCAUSE.reg == RSTC_RCAUSE_BACKUP) {
         // read persistent values
         rtc_mem_read(0, (char *)&persist, sizeof(persist));
@@ -314,6 +345,7 @@ int main(void)
     if (seconds) { printf("Sleep value from persistence: %lu seconds\n", seconds); }
     seconds = (seconds > 0) && (seconds < 36000) ? seconds : SLEEP_TIME_SEC;
 
+    read_measures();
 	int vccReductionFactor = 4;
 // first strategy of power saving on vcc value
 #if 1
