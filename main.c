@@ -428,14 +428,15 @@ int main(void)
 
 #if defined(BOARD_LORA3A_DONGLE) || defined(BOARD_LORA3A_H10) && defined(H10RX)
 
+#ifdef TDK
+uint8_t TDKon[] = {1,1,0,0};
+uint8_t presentTDKon;
+#endif
 #ifdef DAFFY
 uint8_t daffyAddress[] = {0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3c, 0x3d, 0x3e, 0x3f};
 uint8_t daffyPresent[] = {0,0,0,0,0,0,0,0};
 uint8_t daffyInput[] = {0,0,0,0,0,0,0,0};
-uint8_t TDKon[] = {1,1,0,0};
-#ifdef TDK
-uint8_t presentTDKon;
-#endif
+
 // test Daffy presence
 	uint8_t retVal=0;
 	uint8_t i;
@@ -449,7 +450,7 @@ uint8_t presentTDKon;
 			printf("Daffy %d initialised. Input Values: 0x%0x\n", i, daffyInput[i]);
 		}
 	}		
-#endif
+#endif 
 
 printf("Gateway set. Address: %d Bandwidth: %d Frequency: %ld Spreading: %d Coderate: %d\n", 
 EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor, lora.coderate);
@@ -489,63 +490,20 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 			int node_boostmode=0;
 			int node_power=14;
 			int node_rxdb=-90;
+#ifdef TDK			
 			uint16_t tdkRange=9999;
+#endif
 			while( token != NULL) {
 				sprintf(mypayload[i], "%s", token);
 				i++;
 				token = strtok(NULL, ":,");
 			}	 
 			printf("%s,%s,%s,%s\n",mypayload[9],mypayload[10],mypayload[12],mypayload[18]);
+#ifdef TDK
 			tdkRange=atoi(mypayload[18]);
 			printf("tdkRange=%dmm\n", tdkRange);
-			// gestione relays
-#ifdef DAFFY			
-			if (daffyPresent[0] && h->src==24) {
-				if (tdkRange > 2400) {
-					// all relays off
-					writeDaffy(daffyAddress[0], 0x00);
-				} else {
-					ztimer_now_t now = ztimer_now(ZTIMER_MSEC);
-					last_daffy0_write = now;
-					if (tdkRange > 2000) {
-						writeDaffy(daffyAddress[0], 0x10);
-					} else {
-						if (tdkRange > 1500) {
-							writeDaffy(daffyAddress[0], 0x30);
-						} else {
-							if (tdkRange > 1000) {
-								writeDaffy(daffyAddress[0], 0x70);
-							} else {
-								writeDaffy(daffyAddress[0], 0xF0);
-							}
-						}
-					}
-				}				
-			}
-			if (daffyPresent[1] && h->src==25) {
-				if (tdkRange > 2400) {
-					// all relays off
-					writeDaffy(daffyAddress[1], 0x00);
-				} else {
-					ztimer_now_t now = ztimer_now(ZTIMER_MSEC);
-					last_daffy1_write = now;
-					if (tdkRange > 2000) {
-						writeDaffy(daffyAddress[1], 0x10);
-					} else {
-						if (tdkRange > 1500) {
-							writeDaffy(daffyAddress[1], 0x30);
-						} else {
-							if (tdkRange > 1000) {
-								writeDaffy(daffyAddress[1], 0x70);
-							} else {
-								writeDaffy(daffyAddress[1], 0xF0);
-							}
-						}
-					}
-				}				
-			}
+#endif
 
-#endif			
 			if (mypayload[9][0] == 'B') node_boostmode = 1; else node_boostmode = 0;
 			node_power = atoi(mypayload[10]);
 			if (node_power == 0) node_power = 14; // if atoi returns zero for no conversion made
@@ -608,6 +566,63 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 #endif
 			printf("new node settings: %s\n", str_to_node); 
 			send_to(h->src, str_to_node, strlen(str_to_node)+1);
+			
+			// gestione relays
+#ifdef DAFFY			
+			if (daffyPresent[0] && h->src==24) {
+				puts("DAFFY 0 present and node 24\n");
+				if (tdkRange > 2500) {
+					// all relays off with fast blink led 1
+					writeDaffy(daffyAddress[0], 0x10);
+					ztimer_sleep(ZTIMER_MSEC, 250);
+					writeDaffy(daffyAddress[0], 0x00);
+				} else {
+					ztimer_now_t now = ztimer_now(ZTIMER_MSEC);
+					last_daffy0_write = now;
+					if (tdkRange > 2000) {
+						writeDaffy(daffyAddress[0], 0x10);
+					} else {
+						if (tdkRange > 1500) {
+							writeDaffy(daffyAddress[0], 0x30);
+						} else {
+							if (tdkRange > 1000) {
+								writeDaffy(daffyAddress[0], 0x70);
+							} else {
+								writeDaffy(daffyAddress[0], 0xF0);
+							}
+						}
+					}
+				}				
+			}
+			if (daffyPresent[1] && h->src==25) {
+				if (tdkRange > 2400) {
+					// all relays off
+					writeDaffy(daffyAddress[1], 0x00);
+				} else {
+					ztimer_now_t now = ztimer_now(ZTIMER_MSEC);
+					last_daffy1_write = now;
+					if (tdkRange > 2000) {
+						writeDaffy(daffyAddress[1], 0x10);
+					} else {
+						if (tdkRange > 1500) {
+							writeDaffy(daffyAddress[1], 0x30);
+						} else {
+							if (tdkRange > 1000) {
+								writeDaffy(daffyAddress[1], 0x70);
+							} else {
+								writeDaffy(daffyAddress[1], 0xF0);
+							}
+						}
+					}
+				}				
+			}
+
+#endif			
+			
+			
+			
+			
+			
             lora_listen();
         } else {
             ztimer_now_t now = ztimer_now(ZTIMER_MSEC);
@@ -616,18 +631,18 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
                 print_stats();
             }
 #ifdef DAFFY            
-            if (now >= last_daffy0_write + 5000) {
+            if (now >= last_daffy0_write + 6000) {
                 last_daffy0_write = now;
                 if (daffyPresent[0]) {
 					writeDaffy(daffyAddress[0], 0x00);  // 5s after last alarm shut off leds
-//					puts("Shut Off LEDs Daffy1");
+					//puts("Shut Off LEDs Daffy1");
 				}	
             }
-            if (now >= last_daffy1_write + 5000) {
+            if (now >= last_daffy1_write + 6000) {
                 last_daffy1_write = now;
                 if (daffyPresent[1]) {
 					writeDaffy(daffyAddress[1], 0x00);  // 5s after last alarm shut off leds
-//					puts("Shut Off LEDs Daffy2");
+					//puts("Shut Off LEDs Daffy2");
 				}	
             }
             uint8_t val;

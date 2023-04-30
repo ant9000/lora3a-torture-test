@@ -13,6 +13,7 @@ CUSTOMER ?= 0
 DEBUG_SAML21 ?= 0
 DAFFY ?= 0
 RESISTOR ?= 0
+TDK ?= 0
 
 ROLE ?= node
 AES ?= 1
@@ -33,6 +34,10 @@ USEMODULE += periph_spi_reconfigure
 USEMODULE += ztimer_usec
 USEMODULE += saml21_backup_mode
 USEMODULE += saml21_cpu_debug
+
+ifeq ($(TDK), 1)
+  CFLAGS += -DTDK
+endif
 
 ifeq ($(RESISTOR), 1)
   CFLAGS += -DRESISTOR
