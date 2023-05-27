@@ -12,7 +12,6 @@ H10RX ?= 0
 CUSTOMER ?= 0
 DEBUG_SAML21 ?= 0
 DAFFY ?= 0
-RESISTOR ?= 0
 TDK ?= 0
 
 ROLE ?= node
@@ -37,10 +36,6 @@ USEMODULE += saml21_cpu_debug
 
 ifeq ($(TDK), 1)
   CFLAGS += -DTDK
-endif
-
-ifeq ($(RESISTOR), 1)
-  CFLAGS += -DRESISTOR
 endif
 
 ifeq ($(DAFFY), 1)
