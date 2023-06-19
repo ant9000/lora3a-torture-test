@@ -11,8 +11,10 @@
 #include "periph/cpuid.h"
 #include "periph/gpio.h"
 #include "periph/pm.h"
-#include "periph/rtt.h"
+//#include "periph/rtt.h"
 #include "periph/rtc_mem.h"
+#include "periph/rtc.h"
+#include "rtc_utils.h"
 
 #include "hdc.h"
 #include "shell.h"
@@ -21,6 +23,11 @@
 //#define TDK
 #define ENABLE_DEBUG      1
 #include "debug.h"
+
+#include "senseair.h"
+#include "senseair_params.h"
+#include "fram.h"
+
 
 #ifdef DEBUG_SAML21
 #include "saml21_cpu_debug.h"
@@ -44,6 +51,12 @@ static lora_state_t lora;
     .pin=EXTWAKE_PIN6, \
     .polarity=EXTWAKE_HIGH, \
     .flags=EXTWAKE_IN_PU }
+
+static senseair_t dev;
+static senseair_abc_data_t abc_data;
+
+#define SENSEAIR_STATE_FRAM_ADDR    0
+
 
 static saml21_extwake_t extwake = EXTWAKE;
 
@@ -101,6 +114,53 @@ static embit_packet_t q_packet;
 static int gateway_received_rssi;
 static char q_payload[MAX_PACKET_LEN];
 static kernel_pid_t main_pid;
+
+void sensor_read(void)
+{
+    uint16_t conc_ppm;
+    int16_t temp_cC;
+
+    if (gpio_init(ACMEBUS_ENABLE, GPIO_OUT)) {
+        puts("ACME Bus enable failed.");
+        return;
+    }
+    gpio_set(ACMEBUS_ENABLE);
+
+    if (senseair_init(&dev, &senseair_params[0]) != SENSEAIR_OK) {
+        puts("Senseair init failed.");
+        gpio_clear(ACMEBUS_ENABLE);
+        return;
+    }
+
+    memset(&abc_data, 0, sizeof(abc_data));
+    if (fram_read(SENSEAIR_STATE_FRAM_ADDR, &abc_data, sizeof(abc_data))) {
+        puts("FRAM read failed.");
+    } else {
+        if (senseair_write_abc_data(&dev, &abc_data) == SENSEAIR_OK) {
+            puts("ABC data restored to sensor.");
+        } else {
+            puts("ABC data not available.");
+        }
+    }
+
+    if (senseair_read(&dev, &conc_ppm, &temp_cC) == SENSEAIR_OK) {
+        printf("Concentration: %d ppm\n", conc_ppm);
+        printf("Temperature: %4.2f °C\n", (temp_cC/100.));
+    }
+
+    if (senseair_read_abc_data(&dev, &abc_data) == SENSEAIR_OK) {
+        puts("Saving sensor calibration data to FRAM.");
+        if (fram_write(SENSEAIR_STATE_FRAM_ADDR, (uint8_t *)&abc_data, sizeof(abc_data))) {
+            puts("FRAM write failed.");
+        }
+    }
+
+    gpio_clear(ACMEBUS_ENABLE);
+}
+
+
+
+
 
 void send_to(uint8_t dst, char *buffer, size_t len)
 {
@@ -182,6 +242,9 @@ void read_measures(void)
     gpio_init(VPANEL_ENABLE, GPIO_OUT);
     gpio_set(VPANEL_ENABLE);
     cpuid_get(&measures.cpuid);
+    
+    sensor_read();
+    
     // read ten values to check stability VCC
     DEBUG("misurevcc: ");
     int8_t i;
@@ -263,7 +326,8 @@ void backup_mode(uint32_t seconds)
 #ifdef DEBUG_SAML21
     saml21_cpu_debug();
 #endif
-    saml21_backup_mode_enter(RADIO_OFF_NOT_REQUESTED, extwake, (int)seconds, 1);
+//    saml21_backup_mode_enter(RADIO_OFF_NOT_REQUESTED, extwake, (int)seconds, 1);
+    saml21_backup_mode_enter(RADIO_OFF_NOT_REQUESTED, extwake, (int)seconds, 0);
 }
 #endif
 
@@ -287,6 +351,15 @@ int saul_cmd(int num)
     return retval;
 }
 
+void boot_task(void)
+{
+    struct tm time;
+    puts("Boot task.");
+    rtc_localtime(0, &time);
+    rtc_set_time(&time);
+    fram_erase();
+}
+
 
 int main(void)
 {
@@ -306,7 +379,11 @@ int main(void)
 
 	puts("\n");
 	printf("LORA3A-TORTURE-TEST Compiled: %s,%s\n", __DATE__, __TIME__);
+    size_t len = rtc_mem_size();
+    printf("RTC mem size: %d\n", len);
 
+	fram_init();
+	
 #if defined(BOARD_LORA3A_SENSOR1) || defined(BOARD_LORA3A_H10) && !defined(H10RX)
 
 	int16_t bmetemp;
@@ -339,6 +416,7 @@ int main(void)
         memset(&persist, 0, sizeof(persist));
         persist.sleep_seconds = SLEEP_TIME_SEC;
         persist.tx_power = lora.power;
+        boot_task();
     }
     // adjust sleep interval according to available energy
     uint32_t seconds = persist.sleep_seconds;
@@ -409,7 +487,7 @@ int main(void)
 				lora.boost = 1;
 				lora.power = 14;
 			}
-            seconds = 25 + EMB_ADDRESS % 10;
+            seconds = 5 + EMB_ADDRESS % 10;
 			printf("retries = %d, new seconds for retry = %ld\n", persist.retries, seconds);
         }
     } else {

@@ -13,6 +13,7 @@ CUSTOMER ?= 0
 DEBUG_SAML21 ?= 0
 DAFFY ?= 0
 TDK ?= 0
+ACMEBUS ?= 1
 
 ROLE ?= node
 AES ?= 1
@@ -33,6 +34,8 @@ USEMODULE += periph_spi_reconfigure
 USEMODULE += ztimer_usec
 USEMODULE += saml21_backup_mode
 USEMODULE += saml21_cpu_debug
+USEMODULE += senseair
+USEMODULE += fram
 
 ifeq ($(TDK), 1)
   CFLAGS += -DTDK
@@ -52,6 +55,17 @@ endif
 ifeq ($(CUSTOMER), 1)
   CFLAGS += -DCUSTOMER
 endif
+
+ifeq ($(ACMEBUS),1)
+    CFLAGS += -DENABLE_ACME1=MODE_I2C -DSENSEAIR_I2C_DEV=ACME1_I2C_DEV -DSENSEAIR_ENABLE_PIN=GPIO_PIN\(PB,23\) -DACMEBUS_ENABLE=GPIO_PIN\(PA,28\)
+else ifeq ($(ACMEBUS),2)
+    CFLAGS += -DENABLE_ACME2=MODE_I2C -DSENSEAIR_I2C_DEV=ACME2_I2C_DEV -DSENSEAIR_ENABLE_PIN=GPIO_PIN\(PA,7\) -DACMEBUS_ENABLE=GPIO_PIN\(PA,31\)
+else
+    $(error Invalid value for ACMEBUS; should be 1 or 2)
+endif
+
+
+
 
 ifeq ($(BOARD),lora3a-h10)
 	ifeq ($(BME688_ACME1), 1)
