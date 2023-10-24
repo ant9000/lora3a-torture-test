@@ -57,6 +57,8 @@ static senseair_abc_data_t abc_data;
 
 #define SENSEAIR_STATE_FRAM_ADDR    0
 
+#define MIN_RSSI_WANTED -100
+
 
 static saml21_extwake_t extwake = EXTWAKE;
 
@@ -115,6 +117,8 @@ static int gateway_received_rssi;
 static char q_payload[MAX_PACKET_LEN];
 static kernel_pid_t main_pid;
 
+int senseair_temp;
+int senseair_co2;
 void sensor_read(void)
 {
     uint16_t conc_ppm;
@@ -146,6 +150,8 @@ void sensor_read(void)
     if (senseair_read(&dev, &conc_ppm, &temp_cC) == SENSEAIR_OK) {
         printf("Concentration: %d ppm\n", conc_ppm);
         printf("Temperature: %4.2f °C\n", (temp_cC/100.));
+        senseair_co2 = conc_ppm;
+        senseair_temp = temp_cC;
     }
 
     if (senseair_read_abc_data(&dev, &abc_data) == SENSEAIR_OK) {
@@ -246,17 +252,17 @@ void read_measures(void)
     sensor_read();
     
     // read ten values to check stability VCC
-    DEBUG("misurevcc: ");
+//    DEBUG("misurevcc: ");
     int8_t i;
     for (i=0; i<35; i++) {
 		misure[i]= adc_sample(ADC_VCC, ADC_RES_12BIT);  
 		if (i>2) averagemisure+=misure[i];
 	}	
-    for (i=0; i<35; i++) {
-		DEBUG("%ld ",misure[i]);
-		if (i==2) DEBUG("- ");
-	}	
-	printf(" averagevcc= %ld\n",averagemisure);
+//    for (i=0; i<35; i++) {
+//		DEBUG("%ld ",misure[i]);
+//		if (i==2) DEBUG("- ");
+//	}	
+//	printf(" averagevcc= %ld\n",averagemisure);
     // read vcc
 //    measures.vcc = adc_sample(ADC_VCC, ADC_RES_12BIT)*4000/4095;  // corrected value (1V = 4095 counts)
 //	measures.vcc = (averagemisure*4000/4095) >> 5;  // corrected value (1V = 4095 counts)
@@ -265,17 +271,17 @@ void read_measures(void)
     // read vpanel
 //    ztimer_sleep(ZTIMER_MSEC, 30);
   
-	DEBUG("misurepanel: ");
+//	DEBUG("misurepanel: ");
     for (i=0; i<35; i++) {
 		misure[i]= adc_sample(ADC_VPANEL, ADC_RES_12BIT); 
 		if (i>2) averagemisure+=misure[i];
 	}	
     gpio_clear(VPANEL_ENABLE);
-    for (i=0; i<35; i++) {
-		DEBUG("%ld ",misure[i]);
-		if (i==2) DEBUG("- ");
-	}	
-	DEBUG(" averagepanel= %ld\n",averagemisure);
+//    for (i=0; i<35; i++) {
+//		DEBUG("%ld ",misure[i]);
+//		if (i==2) DEBUG("- ");
+//	}	
+//	DEBUG(" averagepanel= %ld\n",averagemisure);
   
 //    measures.vpanel = adc_sample(ADC_VPANEL, ADC_RES_12BIT)*3933/4095; // adapted to real resistor partition value (75k over 220k)
 	measures.vpanel = (averagemisure*3933/4095) >> 5;  // adapted to real resistor partition value (75k over 220k)
@@ -311,7 +317,7 @@ void parse_command(char *ptr, size_t len) {
         token = strtok(NULL, "$");
         txpow = atoi(token);
 //txpow = 14;
-        if (txpow!=0) {
+        if (txpow!=-1) {
 			lora.power = txpow;
 			printf("Instructed to tx at level %d\n",txpow);
 		}
@@ -365,12 +371,14 @@ int main(void)
 {
     memset(&lora, 0, sizeof(lora));
     lora.bandwidth        = DEFAULT_LORA_BANDWIDTH;
+//    lora.bandwidth        = 0;
     lora.spreading_factor = DEFAULT_LORA_SPREADING_FACTOR;
     lora.coderate         = DEFAULT_LORA_CODERATE;
     lora.channel          = DEFAULT_LORA_CHANNEL;
-    lora.power            = DEFAULT_LORA_POWER;
+//    lora.power            = DEFAULT_LORA_POWER;
+    lora.power            = 18;
     lora.data_cb          = *protocol_in;
-
+    
     main_pid = thread_getpid();
     protocol_init(*packet_received);
 
@@ -386,19 +394,19 @@ int main(void)
 	
 #if defined(BOARD_LORA3A_SENSOR1) || defined(BOARD_LORA3A_H10) && !defined(H10RX)
 
-	int16_t bmetemp;
-	int16_t bmepress;
-	int16_t bmehum;
-	int16_t bmevoc;
+//	int16_t bmetemp;
+//	int16_t bmepress;
+//	int16_t bmehum;
+//	int16_t bmevoc;
 
 	printf("Node Sensor set. Address: %d Bandwidth: %d Frequency: %ld Spreading: %d Coderate: %d Listen Time ms: %d\n", 
 	EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor, lora.coderate, LISTEN_TIME_MSEC);
     lora_off();
 
-	bmetemp = saul_cmd (4);
-	bmepress = saul_cmd (5);
-	bmehum = saul_cmd (6);
-	bmevoc = saul_cmd (7);
+//	bmetemp = saul_cmd (4);
+//	bmepress = saul_cmd (5);
+//	bmehum = saul_cmd (6);
+//	bmevoc = saul_cmd (7);
 
     if (RSTC->RCAUSE.reg == RSTC_RCAUSE_BACKUP) {
         // read persistent values
@@ -416,6 +424,7 @@ int main(void)
         memset(&persist, 0, sizeof(persist));
         persist.sleep_seconds = SLEEP_TIME_SEC;
         persist.tx_power = lora.power;
+        persist.boost = 1;
         boot_task();
     }
     // adjust sleep interval according to available energy
@@ -460,7 +469,7 @@ int main(void)
         "vcc:%ld,vpan:%ld,temp:%.2f,hum:%.2f,txp:%c:%d,rxdb:%d,rxsnr:%d,sleep:%lu,%d,%d,%d,%d",
 //        cpuid,
         measures.vcc, measures.vpanel, measures.temp,
-        measures.hum, persist.boost?'B':'R', persist.tx_power, persist.last_rssi, persist.last_snr, seconds, bmetemp, bmepress, bmehum, bmevoc
+        measures.hum, persist.boost?'B':'R', persist.tx_power, persist.last_rssi, persist.last_snr, seconds, senseair_temp, senseair_temp, senseair_co2, senseair_co2
     );
     lora.power = persist.tx_power;
     if (lora_init(&lora) == 0) {
@@ -472,7 +481,7 @@ int main(void)
             packet = (embit_packet_t *)msg.content.ptr;
             persist.last_rssi = packet->rssi;
             persist.last_snr = packet->snr;
-            persist.retries = 2;
+            persist.retries = 3;
             printf("rx rssi %d, rx snr %d, retries=%d\n",packet->rssi, packet->snr, persist.retries);
             char *ptr = packet->payload;
             size_t len = packet->payload_len;
@@ -481,13 +490,14 @@ int main(void)
             puts("No command received.");
             if (persist.retries > 0) {
 				persist.retries--;
+				seconds = 5 + EMB_ADDRESS % 10;
 			} else {
 				// elapsed max number of retries	
 				// set power to maximum and after 10 seconds send again.
 				lora.boost = 1;
-				lora.power = 14;
+				lora.power = 18;
+				seconds = 300;
 			}
-            seconds = 5 + EMB_ADDRESS % 10;
 			printf("retries = %d, new seconds for retry = %ld\n", persist.retries, seconds);
         }
     } else {
@@ -560,14 +570,14 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
             }
             last_message_no[h->src] = h->counter;
             
-		// automatic sensor-node power adaptation for distance (fixed target now at -90dBm)
+		// automatic sensor-node power adaptation for distance (fixed target now at -80dBm)
 		//    printf("payload=%s\n", q_payload);
 			char mypayload[30][7];
 			char *token = strtok(q_payload, ":,");
 			int i=0;
 			int node_boostmode=0;
 			int node_power=14;
-			int node_rxdb=-90;
+			int node_rxdb=MIN_RSSI_WANTED;
 #ifdef TDK			
 			uint16_t tdkRange=9999;
 #endif
@@ -587,31 +597,33 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 			if (node_power == 0) node_power = 14; // if atoi returns zero for no conversion made
 			node_rxdb = atoi(mypayload[12]);
 			if (node_rxdb == 0) {  // if last time the node_sensor has not received the ack set its power to the maximum
-				node_power = 14;
+				node_power = 18;
 				node_boostmode = 1;
 			}
 		//	printf("extracted: rx_rssi= %d, boost=%d, power=%d, rxdb=%d\n", gateway_received_rssi, node_boostmode, node_power, node_rxdb);
-			// strategy to reduce power if node is near (> -90dBm)
-			if (gateway_received_rssi > -90) {
+			// strategy to reduce power if node is near (> -80dBm)
+			if (gateway_received_rssi > MIN_RSSI_WANTED + 2) {
 				// we have to reduce the node tx power
-				if (node_power > 1) node_power--;
-				else if (node_power == 1) {
-					if (node_boostmode == 1) { node_boostmode = 0; node_power = 14; }
-		//			else printf ("Already at R,1 power! \n");
-				}	
+				
+				if (node_power > 1) node_power--; else printf ("Already at B,1 power! \n");
 			} else {
-				// we have to increase the node tx power
-				if (node_power < 14) node_power++;
-				else if (node_power == 14) {
-					if (node_boostmode == 0) { node_boostmode = 1; node_power = 1; }
-		//			else printf ("Already at B,14 power! \n");
-				}	
+				if (gateway_received_rssi < MIN_RSSI_WANTED - 2) {
+					// we have to increase the node tx power
+					if (node_power < 18) node_power++; else printf ("Already at B,18 power! \n");
+				}		
 			}
-		//	printf("New power to set: %c, %d\n", (node_boostmode ? 'B' : 'R'),	node_power);
+//			if (node_power > 14) node_boostmode = 1; else node_boostmode = 0;	
+			node_boostmode = 1;
+			printf("New power to set: %c, %d\n", (node_boostmode ? 'B' : 'R'),	node_power);
 #ifdef TDK
 			presentTDKon = 0;
 #endif
 			switch (h->src) {
+				case 23: interval_time = 10; break;
+				case 24: interval_time = 10; break;
+				case 25: interval_time = 10; break;
+				case 26: interval_time = 10; break;
+				case 27: interval_time = 10; break;
 				case 41: interval_time = 300;	break;
 				case 42: interval_time = 300;	break;
 				case 43: interval_time = 720;	break;
@@ -621,6 +633,7 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 				case 47: interval_time = 300;	break;
 //				case 71: interval_time = 5;		break;
 				case 100: interval_time = 720;	break;
+/*
 				case 24: {  // TDK equipped node sensor
 					interval_time = 60;	
 #ifdef TDK					
@@ -635,6 +648,7 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 #endif
 					}
 					break;
+*/
 				default: interval_time = 60;	break;
 			}
 #ifdef TDK
