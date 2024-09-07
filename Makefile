@@ -1,6 +1,6 @@
 APPLICATION = lora3a-torture-test
 RIOTBASE ?= $(CURDIR)/../RIOT
-LORA3ABASE ?= $(CURDIR)/../lora3a-boards
+LORA3ABASE ?= $(CURDIR)/../lora3a-boards_ROB
 EXTERNAL_BOARD_DIRS=$(LORA3ABASE)/boards
 EXTERNAL_MODULE_DIRS=$(LORA3ABASE)/modules
 EXTERNAL_PKG_DIRS=$(LORA3ABASE)/pkg
@@ -56,6 +56,9 @@ ifeq ($(CUSTOMER), 1)
 endif
 ifeq ($(FAIR), 1)
   CFLAGS += -DFAIR
+endif
+ifeq ($(LAB), 1)
+  CFLAGS += -DLAB
 endif
 
 ifeq ($(ACMEBUS),1)

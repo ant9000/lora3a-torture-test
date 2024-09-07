@@ -57,7 +57,7 @@ static senseair_abc_data_t abc_data;
 
 #define SENSEAIR_STATE_FRAM_ADDR    0
 
-#define MIN_RSSI_WANTED -100
+#define MIN_RSSI_WANTED -90
 
 
 static saml21_extwake_t extwake = EXTWAKE;
@@ -317,7 +317,7 @@ void parse_command(char *ptr, size_t len) {
         token = strtok(NULL, "$");
         txpow = atoi(token);
 //txpow = 14;
-        if (txpow!=-1) {
+        if (txpow>=-1) {
 			lora.power = txpow;
 			printf("Instructed to tx at level %d\n",txpow);
 		}
@@ -536,6 +536,10 @@ uint8_t daffyInput[] = {0,0,0,0,0,0,0,0};
 			initDaffy(daffyAddress[i]);
 			readDaffy(daffyAddress[i], &daffyInput[i]);
 			printf("Daffy %d initialised. Input Values: 0x%0x\n", i, daffyInput[i]);
+			writeDaffy(daffyAddress[0], 0xF0);
+			ztimer_sleep(ZTIMER_MSEC, 250);
+			writeDaffy(daffyAddress[0], 0x00);
+
 		}
 	}		
 #endif 
@@ -569,6 +573,10 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
                 lost_messages[h->src] += h->counter - last_message_no[h->src] - 1;
             }
             last_message_no[h->src] = h->counter;
+			if (num_messages[h->src] == 1) {
+				// first time src node is heared! Reset counters:
+				lost_messages[h->src] = 0;		
+			}	
             
 		// automatic sensor-node power adaptation for distance (fixed target now at -80dBm)
 		//    printf("payload=%s\n", q_payload);
@@ -594,7 +602,7 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 
 			if (mypayload[9][0] == 'B') node_boostmode = 1; else node_boostmode = 0;
 			node_power = atoi(mypayload[10]);
-			if (node_power == 0) node_power = 14; // if atoi returns zero for no conversion made
+//			if (node_power == 0) node_power = 14; // if atoi returns zero for no conversion made
 			node_rxdb = atoi(mypayload[12]);
 			if (node_rxdb == 0) {  // if last time the node_sensor has not received the ack set its power to the maximum
 				node_power = 18;
@@ -605,24 +613,24 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 			if (gateway_received_rssi > MIN_RSSI_WANTED + 2) {
 				// we have to reduce the node tx power
 				
-				if (node_power > 1) node_power--; else printf ("Already at B,1 power! \n");
+				if (node_power > 0) node_power--; else printf ("Already at R,0 power! \n");
 			} else {
 				if (gateway_received_rssi < MIN_RSSI_WANTED - 2) {
 					// we have to increase the node tx power
 					if (node_power < 18) node_power++; else printf ("Already at B,18 power! \n");
 				}		
 			}
-//			if (node_power > 14) node_boostmode = 1; else node_boostmode = 0;	
-			node_boostmode = 1;
+			if (node_power > 14) node_boostmode = 1; else node_boostmode = 0;	
+//			node_boostmode = 1;
 			printf("New power to set: %c, %d\n", (node_boostmode ? 'B' : 'R'),	node_power);
 #ifdef TDK
 			presentTDKon = 0;
 #endif
 			switch (h->src) {
 				case 23: interval_time = 10; break;
-				case 24: interval_time = 10; break;
-				case 25: interval_time = 10; break;
-				case 26: interval_time = 10; break;
+//				case 24: interval_time = 10; break;
+//				case 25: interval_time = 10; break;
+//				case 26: interval_time = 10; break;
 				case 27: interval_time = 10; break;
 				case 41: interval_time = 300;	break;
 				case 42: interval_time = 300;	break;
@@ -630,25 +638,32 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 				case 44: interval_time = 300;	break;
 				case 45: interval_time = 300;	break;
 				case 46: interval_time = 300;	break;
-				case 47: interval_time = 300;	break;
+				case 47: interval_time = 10;	break;
 //				case 71: interval_time = 5;		break;
 				case 100: interval_time = 720;	break;
-/*
+
 				case 24: {  // TDK equipped node sensor
-					interval_time = 60;	
+					interval_time = 20;	
 #ifdef TDK					
 					presentTDKon = TDKon[0];
 #endif
 					}
 					break;
 				case 25: {  // TDK equipped node sensor
-					interval_time = 60;	
+					interval_time = 20;	
 #ifdef TDK					
 					presentTDKon = TDKon[1];
 #endif
 					}
 					break;
-*/
+				case 26: {  // TDK equipped node sensor
+					interval_time = 20;	
+#ifdef TDK					
+					presentTDKon = TDKon[1];
+#endif
+					}
+					break;
+
 				default: interval_time = 60;	break;
 			}
 #ifdef TDK
@@ -661,23 +676,25 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 			
 			// gestione relays
 #ifdef DAFFY			
-			if (daffyPresent[0] && h->src==24) {
+			if (daffyPresent[0] && (h->src==24 || h->src==25 || h->src==26)) {
 				puts("DAFFY 0 present and node 24\n");
-				if (tdkRange > 2500) {
-					// all relays off with fast blink led 1
+				if (tdkRange > 2000) {
+					// all relays off with fast blink led 1 then 2
 					writeDaffy(daffyAddress[0], 0x10);
-					ztimer_sleep(ZTIMER_MSEC, 250);
+					ztimer_sleep(ZTIMER_MSEC, 50);
+					writeDaffy(daffyAddress[0], 0x20);
+					ztimer_sleep(ZTIMER_MSEC, 50);
 					writeDaffy(daffyAddress[0], 0x00);
 				} else {
 					ztimer_now_t now = ztimer_now(ZTIMER_MSEC);
 					last_daffy0_write = now;
-					if (tdkRange > 2000) {
+					if (tdkRange > 1500) {
 						writeDaffy(daffyAddress[0], 0x10);
 					} else {
-						if (tdkRange > 1500) {
+						if (tdkRange > 1000) {
 							writeDaffy(daffyAddress[0], 0x30);
 						} else {
-							if (tdkRange > 1000) {
+							if (tdkRange > 500) {
 								writeDaffy(daffyAddress[0], 0x70);
 							} else {
 								writeDaffy(daffyAddress[0], 0xF0);
@@ -741,6 +758,7 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 			if (daffyPresent[0]) {
 				// update switches status
 				readDaffy(daffyAddress[0], &val);
+				val &=0x0f;
 				if (val != daffyInput[0]) {
 					daffyInput[0]=val;
 					printf("Changed Daffy0 Value: 0x%02x\n", val);
@@ -750,6 +768,7 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 			if (daffyPresent[1]) {
 				// update switches status
 				readDaffy(daffyAddress[1], &val);
+				val &=0x0f;
 				if (val != daffyInput[1]) {
 					daffyInput[1]=val;
 					printf("Changed Daffy1 Value: 0x%02x\n", val);
