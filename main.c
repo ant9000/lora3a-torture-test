@@ -643,21 +643,21 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 				case 100: interval_time = 720;	break;
 
 				case 24: {  // TDK equipped node sensor
-					interval_time = 20;	
+					interval_time = 60;	
 #ifdef TDK					
 					presentTDKon = TDKon[0];
 #endif
 					}
 					break;
 				case 25: {  // TDK equipped node sensor
-					interval_time = 20;	
+					interval_time = 60;	
 #ifdef TDK					
 					presentTDKon = TDKon[1];
 #endif
 					}
 					break;
 				case 26: {  // TDK equipped node sensor
-					interval_time = 20;	
+					interval_time = 60;	
 #ifdef TDK					
 					presentTDKon = TDKon[1];
 #endif
@@ -672,29 +672,29 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 			sprintf(str_to_node,"@%d,%c,%d$", interval_time, (node_boostmode ? 'B' : 'R'), node_power);
 #endif
 			printf("new node settings: %s\n", str_to_node); 
-			send_to(h->src, str_to_node, strlen(str_to_node)+1);
+//			send_to(h->src, str_to_node, strlen(str_to_node)+1);
 			
 			// gestione relays
 #ifdef DAFFY			
 			if (daffyPresent[0] && (h->src==24 || h->src==25 || h->src==26)) {
 				puts("DAFFY 0 present and node 24\n");
-				if (tdkRange > 2000) {
+				if (tdkRange > 3000) {
 					// all relays off with fast blink led 1 then 2
 					writeDaffy(daffyAddress[0], 0x10);
-					ztimer_sleep(ZTIMER_MSEC, 50);
+					ztimer_sleep(ZTIMER_MSEC, 100);
 					writeDaffy(daffyAddress[0], 0x20);
-					ztimer_sleep(ZTIMER_MSEC, 50);
+					ztimer_sleep(ZTIMER_MSEC, 100);
 					writeDaffy(daffyAddress[0], 0x00);
 				} else {
 					ztimer_now_t now = ztimer_now(ZTIMER_MSEC);
 					last_daffy0_write = now;
-					if (tdkRange > 1500) {
+					if (tdkRange > 2000) {
 						writeDaffy(daffyAddress[0], 0x10);
 					} else {
-						if (tdkRange > 1000) {
+						if (tdkRange > 1500) {
 							writeDaffy(daffyAddress[0], 0x30);
 						} else {
-							if (tdkRange > 500) {
+							if (tdkRange > 1000) {
 								writeDaffy(daffyAddress[0], 0x70);
 							} else {
 								writeDaffy(daffyAddress[0], 0xF0);
@@ -728,6 +728,7 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
 
 #endif			
 			
+			send_to(h->src, str_to_node, strlen(str_to_node)+1);
 			
 			
 			
@@ -740,17 +741,17 @@ EMB_ADDRESS, DEFAULT_LORA_BANDWIDTH, DEFAULT_LORA_CHANNEL, lora.spreading_factor
                 print_stats();
             }
 #ifdef DAFFY            
-            if (now >= last_daffy0_write + 6000) {
+            if (now >= last_daffy0_write + 3000) {
                 last_daffy0_write = now;
                 if (daffyPresent[0]) {
-					writeDaffy(daffyAddress[0], 0x00);  // 5s after last alarm shut off leds
+					writeDaffy(daffyAddress[0], 0x00);  // 2s after last alarm shut off leds
 					//puts("Shut Off LEDs Daffy1");
 				}	
             }
-            if (now >= last_daffy1_write + 6000) {
+            if (now >= last_daffy1_write + 3000) {
                 last_daffy1_write = now;
                 if (daffyPresent[1]) {
-					writeDaffy(daffyAddress[1], 0x00);  // 5s after last alarm shut off leds
+					writeDaffy(daffyAddress[1], 0x00);  // 2s after last alarm shut off leds
 					//puts("Shut Off LEDs Daffy2");
 				}	
             }

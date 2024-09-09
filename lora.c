@@ -94,7 +94,7 @@ int lora_write(const iolist_t *packet)
     uint8_t len = iolist_size(packet);
     mutex_lock(&lora_transmission_lock);
 #if defined(BOARD_SAMR34_XPRO) || defined (BOARD_LORA3A_H10)
-	printf("boost=%d txpower=%d\n",lora->boost, lora->power);
+	DEBUG("boost=%d txpower=%d\n",lora->boost, lora->power);
 // put here the output select pin selection based on persist value
 	if (lora->boost) {
 		gpio_clear(TX_OUTPUT_SEL_PIN);   // V1 = 0
